@@ -406,9 +406,14 @@ OMR::TransformUtil::createConditionalAlternatePath(TR::Compilation* comp,
    {
    cfg->setStructure(0);
 
+   bool mergeToElseBlock = elseBlock == mergeBlock ? true : false;
+
    TR::Block* ifBlock = elseBlock;
    ifBlock->prepend(ifTree);
    elseBlock = ifBlock->split(ifTree->getNextTreeTop(), cfg, false /*fixupCommoning*/, true /*copyExceptionSuccessors*/);
+
+   if (mergeToElseBlock)
+      mergeBlock = elseBlock;
 
    TR::Block * thenBlock = TR::Block::createEmptyBlock(thenTree->getNode(), comp, 0, elseBlock);
    if (markCold)
