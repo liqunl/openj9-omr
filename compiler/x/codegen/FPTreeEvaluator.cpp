@@ -364,6 +364,12 @@ TR::Register *OMR::X86::TreeEvaluator::performDload(TR::Node *node, TR::MemoryRe
 // also handles TR::dloadi
 TR::Register *OMR::X86::TreeEvaluator::dloadEvaluator(TR::Node *node, TR::CodeGenerator *cg)
    {
+   if (!node->getOpCode().isIndirect() && node->getOpCode().hasSymbolReference() && node->getSymbol() && node->getSymbol()->isStaticField() && node->getSymbolReference()->getCPIndex() > 0)
+      {
+      cg->generateDebugCounter(TR::DebugCounter::debugCounterName(cg->comp(), "static/load/%s", cg->comp()->getHotnessName(cg->comp()->getMethodHotness())),
+                               1);
+      }
+
    TR::MemoryReference  *tempMR = generateX86MemoryReference(node, cg);
    TR::Register *targetRegister = TR::TreeEvaluator::performDload(node, tempMR, cg);
    tempMR->decNodeReferenceCounts(cg);
@@ -372,6 +378,12 @@ TR::Register *OMR::X86::TreeEvaluator::dloadEvaluator(TR::Node *node, TR::CodeGe
 
 TR::Register *OMR::X86::TreeEvaluator::floatingPointStoreEvaluator(TR::Node *node, TR::CodeGenerator *cg)
    {
+   if (!node->getOpCode().isIndirect() && node->getOpCode().hasSymbolReference() && node->getSymbol() && node->getSymbol()->isStaticField() && node->getSymbolReference()->getCPIndex() > 0)
+      {
+      cg->generateDebugCounter(TR::DebugCounter::debugCounterName(cg->comp(), "static/store/%s", cg->comp()->getHotnessName(cg->comp()->getMethodHotness())),
+                               1);
+      }
+
    bool     nodeIs64Bit    = TR::TreeEvaluator::getNodeIs64Bit(node, cg);
    bool     nodeIsIndirect = node->getOpCode().isIndirect()? 1 : 0;
    TR::Node *valueChild     = node->getChild(nodeIsIndirect);

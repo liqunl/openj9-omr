@@ -72,6 +72,12 @@ TR::Register *OMR::X86::AMD64::TreeEvaluator::lconstEvaluator(TR::Node *node, TR
 // TODO:AMD64: Could this be combined with istoreEvaluator without too much ugliness?
 TR::Register *OMR::X86::AMD64::TreeEvaluator::lstoreEvaluator(TR::Node *node, TR::CodeGenerator *cg)
    {
+   if (!node->getOpCode().isIndirect() && node->getOpCode().hasSymbolReference() && node->getSymbol() && node->getSymbol()->isStaticField() && node->getSymbolReference()->getCPIndex() > 0)
+      {
+      cg->generateDebugCounter(TR::DebugCounter::debugCounterName(cg->comp(), "static/store/%s", cg->comp()->getHotnessName(cg->comp()->getMethodHotness())),
+                               1);
+      }
+
    TR::Node *valueChild;
    TR::Compilation* comp = cg->comp();
 
@@ -117,6 +123,12 @@ TR::Register *OMR::X86::AMD64::TreeEvaluator::lstoreEvaluator(TR::Node *node, TR
 // also handles ilload
 TR::Register *OMR::X86::AMD64::TreeEvaluator::lloadEvaluator(TR::Node *node, TR::CodeGenerator *cg)
    {
+   if (!node->getOpCode().isIndirect() && node->getOpCode().hasSymbolReference() && node->getSymbol() && node->getSymbol()->isStaticField() && node->getSymbolReference()->getCPIndex() > 0)
+      {
+      cg->generateDebugCounter(TR::DebugCounter::debugCounterName(cg->comp(), "static/load/%s", cg->comp()->getHotnessName(cg->comp()->getMethodHotness())),
+                               1);
+      }
+
    TR::MemoryReference  *sourceMR = generateX86MemoryReference(node, cg);
    TR::Register *reg = TR::TreeEvaluator::loadMemory(node, sourceMR, TR_RematerializableLong, node->getOpCode().isIndirect(), cg);
 

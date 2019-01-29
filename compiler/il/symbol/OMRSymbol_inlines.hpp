@@ -668,7 +668,7 @@ OMR::Symbol::isConstObjectRef()
 bool
 OMR::Symbol::isStaticField()
    {
-   return self()->isStatic() && !(self()->isConstObjectRef() || self()->isClassObject() || self()->isAddressOfClassObject() || self()->isConst());
+   return self()->isStatic() && !(self()->isNotDataAddress() || self()->isConstObjectRef() || self()->isClassObject() || self()->isAddressOfClassObject() || self()->isConst());
    }
 
 bool

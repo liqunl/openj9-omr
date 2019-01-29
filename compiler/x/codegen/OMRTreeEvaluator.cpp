@@ -592,6 +592,12 @@ TR::Register *OMR::X86::TreeEvaluator::performIload(TR::Node *node, TR::MemoryRe
 // also handles iaload
 TR::Register *OMR::X86::TreeEvaluator::aloadEvaluator(TR::Node *node, TR::CodeGenerator *cg)
    {
+   if (!node->getOpCode().isIndirect() && node->getOpCode().hasSymbolReference() && node->getSymbol() && node->getSymbol()->isStaticField() && node->getSymbolReference()->getCPIndex() > 0)
+      {
+      cg->generateDebugCounter(TR::DebugCounter::debugCounterName(cg->comp(), "static/load/%s", cg->comp()->getHotnessName(cg->comp()->getMethodHotness())),
+                               1);
+      }
+
    TR::MemoryReference  *sourceMR = generateX86MemoryReference(node, cg);
    TR::Register         *reg      = TR::TreeEvaluator::loadMemory(node, sourceMR, TR_RematerializableAddress, node->getOpCode().isIndirect(), cg);
    reg->setMemRef(sourceMR);
@@ -702,6 +708,12 @@ bool OMR::X86::TreeEvaluator::genNullTestSequence(TR::Node *node,
 // also handles iiload
 TR::Register *OMR::X86::TreeEvaluator::iloadEvaluator(TR::Node *node, TR::CodeGenerator *cg)
    {
+   if (!node->getOpCode().isIndirect() && node->getOpCode().hasSymbolReference() && node->getSymbol() && node->getSymbol()->isStaticField() && node->getSymbolReference()->getCPIndex() > 0)
+      {
+      cg->generateDebugCounter(TR::DebugCounter::debugCounterName(cg->comp(), "static/load/%s", cg->comp()->getHotnessName(cg->comp()->getMethodHotness())),
+                               1);
+      }
+
    TR::MemoryReference  *sourceMR = generateX86MemoryReference(node, cg);
    TR::Register         *reg      = TR::TreeEvaluator::performIload(node, sourceMR, cg);
    reg->setMemRef(sourceMR);
@@ -732,6 +744,12 @@ TR::Register *OMR::X86::TreeEvaluator::iloadEvaluator(TR::Node *node, TR::CodeGe
 // also handles ibload
 TR::Register *OMR::X86::TreeEvaluator::bloadEvaluator(TR::Node *node, TR::CodeGenerator *cg)
    {
+   if (!node->getOpCode().isIndirect() && node->getOpCode().hasSymbolReference() && node->getSymbol() && node->getSymbol()->isStaticField() && node->getSymbolReference()->getCPIndex() > 0)
+      {
+      cg->generateDebugCounter(TR::DebugCounter::debugCounterName(cg->comp(), "static/load/%s", cg->comp()->getHotnessName(cg->comp()->getMethodHotness())),
+                               1);
+      }
+
    TR::MemoryReference  *sourceMR = generateX86MemoryReference(node, cg);
    TR::Register         *reg      = TR::TreeEvaluator::loadMemory(node, sourceMR, TR_RematerializableByte, node->getOpCode().isIndirect(), cg);
 
@@ -748,6 +766,12 @@ TR::Register *OMR::X86::TreeEvaluator::bloadEvaluator(TR::Node *node, TR::CodeGe
 // also handles cload, isload and icload
 TR::Register *OMR::X86::TreeEvaluator::sloadEvaluator(TR::Node *node, TR::CodeGenerator *cg)
    {
+   if (!node->getOpCode().isIndirect() && node->getOpCode().hasSymbolReference() && node->getSymbol() && node->getSymbol()->isStaticField() && node->getSymbolReference()->getCPIndex() > 0)
+      {
+      cg->generateDebugCounter(TR::DebugCounter::debugCounterName(cg->comp(), "static/load/%s", cg->comp()->getHotnessName(cg->comp()->getMethodHotness())),
+                               1);
+      }
+
    TR::MemoryReference  *sourceMR = generateX86MemoryReference(node, cg);
    TR::Register         *reg      = TR::TreeEvaluator::loadMemory(node, sourceMR, TR_RematerializableShort, node->getOpCode().isIndirect(), cg);
 
@@ -854,6 +878,12 @@ TR::Register *OMR::X86::TreeEvaluator::lwrtbarEvaluator(TR::Node *node, TR::Code
 // also used for iistore, astore and iastore
 TR::Register *OMR::X86::TreeEvaluator::integerStoreEvaluator(TR::Node *node, TR::CodeGenerator *cg)
    {
+   if (!node->getOpCode().isIndirect() && node->getOpCode().hasSymbolReference() && node->getSymbol() && node->getSymbol()->isStaticField() && node->getSymbolReference()->getCPIndex() > 0)
+      {
+      cg->generateDebugCounter(TR::DebugCounter::debugCounterName(cg->comp(), "static/store/%s", cg->comp()->getHotnessName(cg->comp()->getMethodHotness())),
+                               1);
+      }
+
 
    TR::Node *valueChild;
    TR::Register *valueReg = NULL;
