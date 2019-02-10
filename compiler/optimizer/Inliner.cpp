@@ -2519,10 +2519,6 @@ TR_ParameterToArgumentMapper::map(TR::Node * node, TR::ParameterSymbol * parm, b
             return newNode;
             }
 
-         if (parmMap->_addressTaken && parmMap->_replacementSymRef->getSymbol()->isAuto())
-            {
-            parmMap->_replacementSymRef->getSymbol()->setAutoAddressTaken();
-            }
          intptrj_t offset= node->getSymbolReference()->getOffset();
 
          node->setSymbolReference(parmMap->_replacementSymRef);
