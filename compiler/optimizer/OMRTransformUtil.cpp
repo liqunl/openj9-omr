@@ -390,7 +390,8 @@ OMR::TransformUtil::removeTree(TR::Compilation *comp, TR::TreeTop * tt)
 void
 OMR::TransformUtil::transformCallNodeToPassThrough(TR::Optimization* opt, TR::Node* node, TR::TreeTop * anchorTree, TR::Node* child)
    {
-   opt->anchorAllChildren(node, anchorTree);
+   if (anchorTree)
+      opt->anchorAllChildren(node, anchorTree);
    node->removeAllChildren();
    node = TR::Node::recreateWithoutProperties(node, TR::PassThrough, 1, child);
    }
