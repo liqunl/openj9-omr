@@ -151,7 +151,8 @@ TR_LocalTransparency::TR_LocalTransparency(TR_LocalAnalysisInfo &info, bool t)
       else if (firstOpCodeInTree.getOpCodeValue() == TR::BBEnd)
           *_hasTransparencyInfoFor |= *(storedSymRefsInBlock[blockNumber]);
 
-      updateUsesAndDefs(currentTree->getNode(), globalDefinedSymbolReferences, definedSymbolReferencesInBlock[blockNumber], storedSymRefsInBlock[blockNumber], symRefsDefinedAfterStoredInBlock[blockNumber], symRefsUsedAfterDefinedInBlock[blockNumber], startVisitCount, tempContainer, temp, allStoredSymRefsInMethod);
+      TR::NodeChecklist visitedNodes(comp());
+      updateUsesAndDefs(currentTree->getNode(), globalDefinedSymbolReferences, definedSymbolReferencesInBlock[blockNumber], storedSymRefsInBlock[blockNumber], symRefsDefinedAfterStoredInBlock[blockNumber], symRefsUsedAfterDefinedInBlock[blockNumber], visitedNodes, tempContainer, temp, allStoredSymRefsInMethod);
 
       currentTree = currentTree->getNextTreeTop();
       }
@@ -246,8 +247,9 @@ TR_LocalTransparency::TR_LocalTransparency(TR_LocalAnalysisInfo &info, bool t)
       // the expressions that are not transparent because of writes
       // to this symbol.
       //
-      vcount_t visitCount3 = comp()->incOrResetVisitCount();
-      updateInfoForSupportedNodes(currentNode, allSymbolReferences, allSymbolReferencesInNullCheckReference, allSymbolReferencesInStore, globalDefinedSymbolReferences, storedSymRefsInBlock[blockNumber], allStoredSymRefsInMethod, visitCount3);
+      //vcount_t visitCount3 = comp()->incOrResetVisitCount();
+      TR::NodeChecklist visitedNodes(comp());
+      updateInfoForSupportedNodes(currentNode, allSymbolReferences, allSymbolReferencesInNullCheckReference, allSymbolReferencesInStore, globalDefinedSymbolReferences, storedSymRefsInBlock[blockNumber], allStoredSymRefsInMethod, visitedNodes);
 
       // Enter only if this is a store or a check for which we want
       // to do PRE. We exclude write barriers currently but I'll enable it
@@ -487,16 +489,15 @@ TR_LocalTransparency::getTransparencyInfo(int32_t symRefNum)
    }
 
 
-void TR_LocalTransparency::updateUsesAndDefs(TR::Node *node, ContainerType *globallySeenDefinedSymbolReferences, ContainerType *seenDefinedSymbolReferences, ContainerType *seenStoredSymRefs, ContainerType *symRefsDefinedAfterStored,  ContainerType *symRefsUsedAfterDefined, vcount_t visitCount, ContainerType *tempContainer, TR_BitVector *temp, ContainerType *allStoredSymRefsInMethod)
+void TR_LocalTransparency::updateUsesAndDefs(TR::Node *node, ContainerType *globallySeenDefinedSymbolReferences, ContainerType *seenDefinedSymbolReferences, ContainerType *seenStoredSymRefs, ContainerType *symRefsDefinedAfterStored,  ContainerType *symRefsUsedAfterDefined, TR::NodeChecklist &visitedNodes, ContainerType *tempContainer, TR_BitVector *temp, ContainerType *allStoredSymRefsInMethod)
    {
-   if (node->getVisitCount() == visitCount)
-      return;
+   if (visitedNodes.contains(node))
+      return
 
-   node->setVisitCount(visitCount);
-
+   visitedNodes.add(node);
    int32_t i;
    for (i = 0;i < node->getNumChildren();i++)
-      updateUsesAndDefs(node->getChild(i), globallySeenDefinedSymbolReferences, seenDefinedSymbolReferences, seenStoredSymRefs, symRefsDefinedAfterStored, symRefsUsedAfterDefined, visitCount, tempContainer, temp, allStoredSymRefsInMethod);
+      updateUsesAndDefs(node->getChild(i), globallySeenDefinedSymbolReferences, seenDefinedSymbolReferences, seenStoredSymRefs, symRefsDefinedAfterStored, symRefsUsedAfterDefined, visitedNodes, tempContainer, temp, allStoredSymRefsInMethod);
 
 
    TR::ILOpCode &opCode = node->getOpCode();
@@ -648,12 +649,12 @@ void TR_LocalTransparency::updateUsesAndDefs(TR::Node *node, ContainerType *glob
 
 
 
-void TR_LocalTransparency::updateInfoForSupportedNodes(TR::Node *node, ContainerType *allSymbolReferences, ContainerType *allSymbolReferencesInNullCheckReference, ContainerType *allSymbolReferencesInStore, ContainerType *seenDefinedSymbolReferences, ContainerType *seenStoredSymRefs, ContainerType *allStoredSymRefsInMethod, vcount_t visitCount)
+void TR_LocalTransparency::updateInfoForSupportedNodes(TR::Node *node, ContainerType *allSymbolReferences, ContainerType *allSymbolReferencesInNullCheckReference, ContainerType *allSymbolReferencesInStore, ContainerType *seenDefinedSymbolReferences, ContainerType *seenStoredSymRefs, ContainerType *allStoredSymRefsInMethod, TR::NodeChecklist &visitedNodes)
    {
-   if (visitCount <= node->getVisitCount())
+   if (visitedNodes.contains(node))
       return;
 
-   node->setVisitCount(visitCount);
+   visitedNodes.add(node);
 
    TR::ILOpCode &opCode = node->getOpCode();
 
@@ -679,7 +680,7 @@ void TR_LocalTransparency::updateInfoForSupportedNodes(TR::Node *node, Container
             }
          }
 
-      updateInfoForSupportedNodes(child, allSymbolReferences, allSymbolReferencesInNullCheckReference, allSymbolReferencesInStore, seenDefinedSymbolReferences, seenStoredSymRefs, allStoredSymRefsInMethod, visitCount);
+      updateInfoForSupportedNodes(child, allSymbolReferences, allSymbolReferencesInNullCheckReference, allSymbolReferencesInStore, seenDefinedSymbolReferences, seenStoredSymRefs, allStoredSymRefsInMethod, visitedNodes);
 
       if (((node->getLocalIndex() != MAX_SCOUNT) && (node->getLocalIndex() != 0)) && (!(opCode.isStore() || opCode.isCheck())))
          {
