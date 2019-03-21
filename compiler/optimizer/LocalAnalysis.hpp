@@ -232,8 +232,8 @@ class TR_LocalTransparency : public TR_LocalAnalysis
    public:
 
    TR_LocalTransparency(TR_LocalAnalysisInfo &, bool);
-   void updateInfoForSupportedNodes(TR::Node *, ContainerType *, ContainerType *, ContainerType *, ContainerType *, ContainerType *, ContainerType *, vcount_t);
-   void updateUsesAndDefs(TR::Node *, ContainerType *, ContainerType *, ContainerType *,  ContainerType *, ContainerType *, vcount_t, ContainerType *, TR_BitVector *, ContainerType *);
+   void updateInfoForSupportedNodes(TR::Node *, ContainerType *, ContainerType *, ContainerType *, ContainerType *, ContainerType *, ContainerType *, TR::NodeChecklist &visitedNodes);
+   void updateUsesAndDefs(TR::Node *, ContainerType *, ContainerType *, ContainerType *,  ContainerType *, ContainerType *, TR::NodeChecklist &visitedNodes, ContainerType *, TR_BitVector *, ContainerType *);
    void adjustInfoForAddressAdd(TR::Node *, TR::Node *, ContainerType *, ContainerType *);
 
    bool loadaddrAsLoad() {return _loadaddrAsLoad;}
