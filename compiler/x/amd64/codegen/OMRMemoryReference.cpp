@@ -455,7 +455,7 @@ OMR::X86::AMD64::MemoryReference::addMetaDataForCodeAddressWithLoad(
             cg->addExternalRelocation(new (cg->trHeapMemory()) TR::ExternalRelocation(displacementLocation, 0, TR_AbsoluteMethodAddress, cg),
                                  __FILE__,__LINE__,containingInstruction->getNode());
          }
-      else if (sr.getSymbol()->isDebugCounter())
+      else if (sr.getSymbol()->isDebugCounter() && cg->comp()->compileRelocatableCode())
          {
          TR::DebugCounterBase *counter = cg->comp()->getCounterFromStaticAddress(&sr);
          if (counter == NULL)
