@@ -1515,6 +1515,9 @@ TR_InlinerBase::createVirtualGuard(
    if (guard->_kind == TR_MutableCallSiteTargetGuard)
       {
       TR::KnownObjectTable *knot = comp()->getOrCreateKnownObjectTable();
+      TR::DebugCounter::prependDebugCounter(comp(),
+         TR::DebugCounter::debugCounterName(comp(), "MutableCallSite/changedTarget/%s/bcinfo=%d.%d", comp()->signature(), bcInfo.getCallerIndex(), bcInfo.getByteCodeIndex()),debugCounterInsertionPoint);
+
       if (knot)
          heuristicTrace(tracer(),"  createVirtualGuard: MutableCallSite.epoch is %p.obj%d (%p.%p)", guard->_mutableCallSiteObject, guard->_mutableCallSiteEpoch, *guard->_mutableCallSiteObject, *knot->getPointerLocation(guard->_mutableCallSiteEpoch));
       return TR_VirtualGuard::createMutableCallSiteTargetGuard(comp(), calleeIndex, callNode, destination, guard->_mutableCallSiteObject, guard->_mutableCallSiteEpoch);
@@ -4956,6 +4959,14 @@ bool TR_InlinerBase::inlineCallTarget2(TR_CallStack * callStack, TR_CallTarget *
    TR::TreeTop * startOfInlinedCall = calleeSymbol->getFirstTreeTop()->getNextTreeTop();
    TR::Block * calleeFirstBlock = calleeSymbol->getFirstTreeTop()->getEnclosingBlock();
    TR::Block * calleeLastBlock = calleeSymbol->getLastTreeTop()->getEnclosingBlock();
+
+   if (guard->_kind == TR_MutableCallSiteTargetGuard)
+      {
+      TR_ByteCodeInfo bcInfo = callNodeTreeTop->getNode()->getByteCodeInfo();
+      TR::DebugCounter::prependDebugCounter(comp(),
+         TR::DebugCounter::debugCounterName(comp(), "MutableCallSite/sameTarget/%s/bcinfo=%d.%d", comp()->signature(), bcInfo.getCallerIndex(), bcInfo.getByteCodeIndex()), startOfInlinedCall);
+      startOfInlinedCall = calleeSymbol->getFirstTreeTop()->getNextTreeTop();
+      }
 
    if (pam.firstTempTreeTop())
       {
