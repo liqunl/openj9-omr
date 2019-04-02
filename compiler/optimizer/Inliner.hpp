@@ -464,7 +464,7 @@ class TR_ParameterToArgumentMapper
    public:
       TR_ALLOC(TR_Memory::Inliner)
 
-      TR_ParameterToArgumentMapper(TR::ResolvedMethodSymbol *, TR::ResolvedMethodSymbol *, TR::Node *,
+      TR_ParameterToArgumentMapper(TR::ResolvedMethodSymbol *, TR::ResolvedMethodSymbol *, TR::Node *, TR_PrexArgInfo *,
                                    List<TR::SymbolReference> &, List<TR::SymbolReference> &,
                                    List<TR::SymbolReference> &, TR_InlinerBase *);
 
@@ -504,6 +504,7 @@ class TR_ParameterToArgumentMapper
       List<TR::SymbolReference> &       _availableTemps2;
       TR_InlinerTracer *               _tracer;
       TR_InlinerBase *                 _inliner;
+      TR_PrexArgInfo *                 _argInfo;
    };
 
 class OMR_InlinerHelper
@@ -673,6 +674,7 @@ class TR_TransformInlinedFunction
    protected:
       void                 transformNode(TR::Node *, TR::Node *, uint32_t, TR::NodeChecklist &visitedNodes);
       void                 transformReturn(TR::Node *, TR::Node *);
+      void                 createKnownObjReceiverTemp();
 
       TR::Compilation *               _comp;
       TR_InlinerTracer *             _tracer;
@@ -701,6 +703,7 @@ class TR_TransformInlinedFunction
       bool                           _determineIfReturnCanBeReplacedWithCallNodeReference;
       bool                           _traceVIP; // traceValueInitPropagation
       bool                           _crossedBasicBlock;
+      TR::SymbolReference*           _knownObjReceiverSymRef;
 
       int32_t findCallNodeRecursionDepth;
       int32_t onlyMultiRefNodeIsCallNodeRecursionDepth;
