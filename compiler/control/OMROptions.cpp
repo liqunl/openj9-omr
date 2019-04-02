@@ -481,6 +481,7 @@ TR::OptionTable OMR::Options::_jitOptions[] = {
 #endif
    {"disableProfiling",                   "O\tdisable profiling",                              SET_OPTION_BIT(TR_DisableProfiling), "P"},
    {"disableProfilingDataReclamation",    "O\tdisable reclamation for profiling data",         SET_OPTION_BIT(TR_DisableProfilingDataReclamation), "F", NOT_IN_SUBSET},
+   {"disablePropagateKnownObjForArgs",    "O\tpropagateKnownObjForArgs",                       SET_OPTION_BIT(TR_DisablePropagateKnownObjForArgs), "F"},
    {"disableRampupImprovements",          "M\tDisable various changes that improve rampup",    SET_OPTION_BIT(TR_DisableRampupImprovements), "F", NOT_IN_SUBSET},
    {"disableReadMonitors",                 "O\tdisable read monitors",                         SET_OPTION_BIT(TR_DisableReadMonitors), "F"},
    {"disableRecognizedCallTransformer",    "O\tdisable recognized call transformer",           TR::Options::disableOptimization, recognizedCallTransformer, 0, "P"},

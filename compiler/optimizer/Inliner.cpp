@@ -2218,12 +2218,13 @@ bool rematerializeConstant(TR::Node *node, TR::Compilation *comp)
 ///////////////////////////////////////////////////////////////
 
 TR_ParameterToArgumentMapper::TR_ParameterToArgumentMapper(
-   TR::ResolvedMethodSymbol * callerSymbol, TR::ResolvedMethodSymbol * calleeSymbol, TR::Node * callNode,
+   TR::ResolvedMethodSymbol * callerSymbol, TR::ResolvedMethodSymbol * calleeSymbol, TR::Node * callNode, TR_PrexArgInfo *argInfo,
    List<TR::SymbolReference> & temps, List<TR::SymbolReference> & availableTemps, List<TR::SymbolReference> & availableTemps2,
    TR_InlinerBase *inliner)
    : _callerSymbol(callerSymbol),
      _calleeSymbol(calleeSymbol),
      _callNode(callNode),
+     _argInfo(argInfo),
      _tempList(temps),
      _availableTemps(availableTemps),
      _availableTemps2(availableTemps2),
@@ -2358,11 +2359,21 @@ TR_ParameterToArgumentMapper::initialize(TR_CallStack *callStack)
                {
                TR::SymbolReference * symRef = NULL;
 
+               int argOrdinal = argIndex - _callNode->getFirstArgumentIndex();
+               TR_PrexArgument * prexArgument = _argInfo->get(argOrdinal);
+               if (prexArgument &&
+                   TR_PrexArgument::knowledgeLevel(prexArgument) == KNOWN_OBJECT
+                   && !prexArgument->isTypeInfoFromGuard()
+                   && !comp()->getOption(TR_DisablePropagateKnownObjForArgs))
                   {
-                  tt = OMR_InlinerUtil::storeValueInATemp(comp(), arg, symRef, 0, _calleeSymbol, _tempList, _availableTemps, &_availableTemps2, false, &newValueStoreTreeTop);
+                  TR::SymbolReference *knownObjectTempSymRef = comp()->getSymRefTab()->findOrCreateTemporaryWithKnowObjectIndex(_callerSymbol, prexArgument->getKnownObjectIndex());
+                  if (performTransformation(comp(), "%s store arg %p into known object temp #%d as priv arg\n", OPT_DETAILS, arg, knownObjectTempSymRef->getReferenceNumber()))
+                     symRef = knownObjectTempSymRef;
                   }
 
+               tt = OMR_InlinerUtil::storeValueInATemp(comp(), arg, symRef, 0, _calleeSymbol, _tempList, _availableTemps, &_availableTemps2, false, &newValueStoreTreeTop);
                symRef->getSymbol()->setBehaveLikeNonTemp();
+
                // set flag only if there is a virtual guard
                if (!hasStaticCallStack && !neverNeedPrivatizedArguments
                      && tt->getNode()->getOpCode().isStoreDirectOrReg()) // compjazz 53912: PLX sometimes privatizes using indirect stores
@@ -2373,29 +2384,18 @@ TR_ParameterToArgumentMapper::initialize(TR_CallStack *callStack)
                }
             }
 
-         if (_lastTempTreeTop)
-            {
-            if (newValueStoreTreeTop)
-               {
-               tt->join(newValueStoreTreeTop);
-               _lastTempTreeTop->join(tt);
-               _lastTempTreeTop = newValueStoreTreeTop;
-               }
-            else
-               {
-               _lastTempTreeTop->join(tt);
-               _lastTempTreeTop = tt;
-               }
-            }
-         else if (newValueStoreTreeTop)
-            {
+
+         if (!_firstTempTreeTop)
             _firstTempTreeTop = tt;
-            _firstTempTreeTop->join(newValueStoreTreeTop);
+         else
+            _lastTempTreeTop->join(tt);
+         _lastTempTreeTop = tt;
+
+         if (newValueStoreTreeTop)
+            {
+            _lastTempTreeTop->join(newValueStoreTreeTop);
             _lastTempTreeTop = newValueStoreTreeTop;
             }
-         else
-            _firstTempTreeTop = _lastTempTreeTop = tt;
-
 
          parmMap = parmMap->getNext();
          }
@@ -2635,9 +2635,35 @@ TR_TransformInlinedFunction::TR_TransformInlinedFunction(
      _blocksWithEdgesToTheEnd(c->trMemory()),
      _traceVIP(c->getOption(TR_TraceVIP)),
      _favourVftCompare(false),
+     _knownObjReceiverSymRef(NULL),
      findCallNodeRecursionDepth(0),
      onlyMultiRefNodeIsCallNodeRecursionDepth(0)
    {
+   createKnownObjReceiverTemp();
+   }
+
+void
+TR_TransformInlinedFunction::createKnownObjReceiverTemp()
+   {
+   static bool doit= feGetEnv("TR_DisableTransformGuardedReceiverToKnownObj") ? false : true ;
+   TR_PrexArgInfo *argInfo = doit? comp()->getCurrentInlinedCallArgInfo() : NULL;
+   if (_calleeSymbol->firstArgumentIsReceiver() && argInfo)
+      {
+      int firstArgIndex = _callNode->getFirstArgumentIndex();
+      TR_ParameterMapping *receiverMapping = _parameterMapper.getFirstMapping();
+      if (!receiverMapping->_parmIsModified)
+         {
+         TR_PrexArgument *prexArgument = argInfo->get(0);
+         if (doit && prexArgument && prexArgument->isTypeInfoFromGuard() && TR_PrexArgument::knowledgeLevel(prexArgument) == KNOWN_OBJECT)
+            {
+            TR::SymbolReference *origTempSymRef = receiverMapping->_replacementSymRef;
+            TR::SymbolReference *knownObjSymRef = comp()->getSymRefTab()->findOrCreateTemporaryWithKnowObjectIndex(_callerSymbol, prexArgument->getKnownObjectIndex());
+            TR::TreeTop *storeToKnownObjSymRef = TR::TreeTop::create(comp(), TR::Node::createStore(knownObjSymRef, TR::Node::createLoad(_calleeSymbol->getFirstTreeTop()->getNode(), origTempSymRef)));
+            storeToKnownObjSymRef->insertNewTreeTop(_calleeSymbol->getFirstTreeTop(), _calleeSymbol->getFirstTreeTop()->getNextTreeTop());
+            _knownObjReceiverSymRef = knownObjSymRef;
+            }
+         }
+      }
    }
 
 /**
@@ -2789,7 +2815,9 @@ TR_TransformInlinedFunction::transformNode(TR::Node * node, TR::Node * parent, u
       TR::Symbol * symbol = node->getSymbol();
       if (symbol->isParm())
          {
+         TR::SymbolReference * oldSymRef = node->getSymbolReference();
          TR::Node * newNode = _parameterMapper.map(node, symbol->getParmSymbol(), _crossedBasicBlock);
+
          if (newNode && newNode != node)
             {
             if (newNode->getOpCode().isLoadConst() && newNode->getType().isInt32() && node->getType().isInt8())
@@ -2823,6 +2851,14 @@ TR_TransformInlinedFunction::transformNode(TR::Node * node, TR::Node * parent, u
 
             parent->setChild(childIndex, newNode);
             visitedNodes.remove(node);
+            }
+
+         if (newNode && node->getOpCode().isLoadDirect() && oldSymRef->isThisPointer()
+               && _knownObjReceiverSymRef)
+            {
+            TR_ParameterMapping *receiverMapping = _parameterMapper.getFirstMapping();
+            if (!receiverMapping->_parmIsModified && performTransformation(_comp, "%s set symRef on node n%dn to be known object symRef %p\n", OPT_DETAILS, node->getGlobalIndex(), _knownObjReceiverSymRef))
+               newNode->setSymbolReference(_knownObjReceiverSymRef);
             }
          }
       }
@@ -4909,7 +4945,7 @@ bool TR_InlinerBase::inlineCallTarget2(TR_CallStack * callStack, TR_CallTarget *
       }
 
    TR_ScratchList<TR::SymbolReference> tempList(trMemory());
-   TR_ParameterToArgumentMapper pam(callerSymbol, calleeSymbol, callNode, tempList, _availableTemps, _availableBasicBlockTemps, this);
+   TR_ParameterToArgumentMapper pam(callerSymbol, calleeSymbol, callNode, calltarget->_prexArgInfo, tempList, _availableTemps, _availableBasicBlockTemps, this);
    pam.initialize(callStack);
 
    pam.printMapping();
