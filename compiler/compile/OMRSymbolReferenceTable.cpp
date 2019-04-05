@@ -989,30 +989,50 @@ OMR::SymbolReferenceTable::findOrCreateSymRefWithKnownObject(TR::SymbolReference
    }
 
 TR::SymbolReference *
-OMR::SymbolReferenceTable::findOrCreateSymRefWithKnownObject(TR::SymbolReference *original, TR::KnownObjectTable::Index objectIndex)
+OMR::SymbolReferenceTable::findTempSymRefWithKnownObject(TR::KnownObjectTable::Index knownObjectIndex)
    {
-   TR_BitVector *bucket = _knownObjectSymrefsByObjectIndex[objectIndex];
+   return findSymRefWithKnownObject(NULL, knownObjectIndex, true /* isTemp */);
+   }
+
+TR::SymbolReference *
+OMR::SymbolReferenceTable::findSymRefWithKnownObject(TR::Symbol *symbol, TR::KnownObjectTable::Index knownObjectIndex, bool isTemp)
+   {
+   TR_BitVector *bucket = _knownObjectSymrefsByObjectIndex[knownObjectIndex];
    if (!bucket)
-      {
-      bucket = new (trHeapMemory()) TR_BitVector(baseArray.size(), trMemory(), heapAlloc, growable, TR_MemoryBase::SymbolReference);
-      _knownObjectSymrefsByObjectIndex[objectIndex] = bucket;
-      }
+      return NULL;
 
    TR_BitVectorIterator bvi(*bucket);
    while (bvi.hasMoreElements())
       {
       TR::SymbolReference *symRef = getSymRef(bvi.getNextElement());
-      if (symRef->getSymbol() == original->getSymbol())
+      if (symbol && symRef->getSymbol() == symbol)
+         return symRef;
+      if (isTemp && symRef->getSymbol()->isAuto()) //find any temp with the given knownObjectIndex
          return symRef;
       }
+   return NULL;
+   }
+
+TR::SymbolReference *
+OMR::SymbolReferenceTable::findOrCreateSymRefWithKnownObject(TR::SymbolReference *originalSymRef, TR::KnownObjectTable::Index knownObjectIndex)
+   {
+   TR::SymbolReference *symRef = findSymRefWithKnownObject(originalSymRef->getSymbol(), knownObjectIndex);
+   if (symRef)
+      return symRef;
 
    // Need a new one
-   TR::SymbolReference *result = new (trHeapMemory()) TR::SymbolReference(self(), *original, 0, objectIndex);
+   TR_BitVector *bucket = _knownObjectSymrefsByObjectIndex[knownObjectIndex];
+   if (!bucket)
+      {
+      bucket = new (trHeapMemory()) TR_BitVector(baseArray.size(), trMemory(), heapAlloc, growable, TR_MemoryBase::SymbolReference);
+      _knownObjectSymrefsByObjectIndex[knownObjectIndex] = bucket;
+      }
+   TR::SymbolReference *result = new (trHeapMemory()) TR::SymbolReference(self(), *originalSymRef, 0, knownObjectIndex);
    bucket->set(result->getReferenceNumber());
 
    // If the known object symref is created for an immutable array shadow, it should be aliased to other array shadows as well
    // Put the symRef in arrayElementSymRefs so that its alias set can be built correctly
-   if (isImmutableArrayShadow(original))
+   if (isImmutableArrayShadow(originalSymRef))
       {
       result->setReallySharesSymbol();
       int32_t index = result->getReferenceNumber();
@@ -1023,6 +1043,19 @@ OMR::SymbolReferenceTable::findOrCreateSymRefWithKnownObject(TR::SymbolReference
    return result;
    }
 
+TR::SymbolReference *
+OMR::SymbolReferenceTable::createTempSymRefWithKnownObject(TR::Symbol *symbol, mcount_t owningMethodIndex, int32_t slot, TR::KnownObjectTable::Index knownObjectIndex)
+   {
+   TR_BitVector *bucket = _knownObjectSymrefsByObjectIndex[knownObjectIndex];
+   if (!bucket)
+      {
+      bucket = new (trHeapMemory()) TR_BitVector(baseArray.size(), trMemory(), heapAlloc, growable, TR_MemoryBase::SymbolReference);
+      _knownObjectSymrefsByObjectIndex[knownObjectIndex] = bucket;
+      }
+   TR::SymbolReference * symRef = new (trHeapMemory()) TR::SymbolReference(self(), symbol, owningMethodIndex, slot, 0 /*unresolvedIndex*/, knownObjectIndex);
+   bucket->set(symRef->getReferenceNumber());
+   return symRef;
+   }
 
 TR::SymbolReference *
 OMR::SymbolReferenceTable::findOrCreateMonitorExitSymbolRef(TR::ResolvedMethodSymbol *)
@@ -1499,7 +1532,7 @@ OMR::SymbolReferenceTable::findOrCreateMethodSymbol(
 
 
 TR::SymbolReference *
-OMR::SymbolReferenceTable::findOrCreateAutoSymbol(TR::ResolvedMethodSymbol * owningMethodSymbol, int32_t slot, TR::DataType type, bool isReference, bool isInternalPointer, bool reuseAuto, bool isAdjunct, size_t size)
+OMR::SymbolReferenceTable::findOrCreateAutoSymbol(TR::ResolvedMethodSymbol * owningMethodSymbol, int32_t slot, TR::DataType type, bool isReference, bool isInternalPointer, bool reuseAuto, bool isAdjunct, size_t size, TR::KnownObjectTable::Index knownObjectIndex)
    {
    mcount_t owningMethodIndex = owningMethodSymbol->getResolvedMethodIndex();
    int32_t numberOfParms = owningMethodSymbol->getNumParameterSlots();
@@ -1630,7 +1663,11 @@ OMR::SymbolReferenceTable::findOrCreateAutoSymbol(TR::ResolvedMethodSymbol * own
             sym->setGCMapIndex(-1);
          }
 
-      symRef = new (trHeapMemory()) TR::SymbolReference(self(), sym, owningMethodIndex, slot);
+      if (knownObjectIndex == TR::KnownObjectTable::UNKNOWN)
+         symRef = new (trHeapMemory()) TR::SymbolReference(self(), sym, owningMethodIndex, slot);
+      else
+         symRef = createTempSymRefWithKnownObject(sym, owningMethodIndex, slot, knownObjectIndex);
+
       if (isAdjunct)
          symRef->setIsAdjunct();
 
@@ -1696,11 +1733,16 @@ OMR::SymbolReferenceTable::makeAutoAvailableForIlGen(TR::SymbolReference * a)
 
 TR::ParameterSymbol *
 OMR::SymbolReferenceTable::createParameterSymbol(
-   TR::ResolvedMethodSymbol * owningMethodSymbol, int32_t slot, TR::DataType type)
+   TR::ResolvedMethodSymbol * owningMethodSymbol, int32_t slot, TR::DataType type, TR::KnownObjectTable::Index knownObjectIndex knownObjectIndex)
    {
    TR::ParameterSymbol * sym = TR::ParameterSymbol::create(trHeapMemory(),type,slot);
 
-   TR::SymbolReference *symRef = new (trHeapMemory()) TR::SymbolReference(self(), sym, owningMethodSymbol->getResolvedMethodIndex(), slot);
+   TR::SymbolReference *symRef = NULL;
+   if (knownObjectIndex == TR::KnownObjectTable::UNKNOWN)
+      symRef = new (trHeapMemory()) TR::SymbolReference(self(), sym, owningMethodSymbol->getResolvedMethodIndex(), slot);
+   else
+      symRef = createTempSymRefWithKnownObject(sym, owningMethodIndex, slot, knownObjectIndex);
+
    owningMethodSymbol->setParmSymRef(slot, symRef);
    owningMethodSymbol->getAutoSymRefs(slot).add(symRef);
 
@@ -1716,6 +1758,23 @@ OMR::SymbolReferenceTable::createTemporary(TR::ResolvedMethodSymbol * owningMeth
 #endif
 
    return findOrCreateAutoSymbol(owningMethodSymbol, owningMethodSymbol->incTempIndex(fe()), type, true, isInternalPointer, false, false, size);
+   }
+
+TR::SymbolReference *
+OMR::SymbolReferenceTable::findOrCreateTemporaryWithKnowObjectIndex(TR::ResolvedMethodSymbol * owningMethodSymbol, TR::KnownObjectTable::Index knownObjectIndex)
+   {
+   TR::SymbolReference *symRef = findTempSymRefWithKnownObject(knownObjectIndex);
+   if (symRef)
+      return symRef;
+   return findOrCreateAutoSymbol(owningMethodSymbol,
+                                 owningMethodSymbol->incTempIndex(fe()),
+                                 TR::Address,
+                                 true /* isReference */,
+                                 false /* isInternalPointer*/,
+                                 false /* reuseAuto */,
+                                 false /* isAdjunct */,
+                                 0 /*size*/,
+                                 knownObjectIndex);
    }
 
 TR::SymbolReference *
