@@ -602,7 +602,7 @@ void TR_ResolvedMethod::makeParameterList(TR::ResolvedMethodSymbol *methodSym)
          {
          TR::KnownObjectTable *knot = methodSym->comp()->getOrCreateKnownObjectTable();
          if (knot)
-            knownObjectIndex = knot->getIndexAt(getMethodHandleLocation());
+            knownObjectIndex = knot->getExistingIndexAt(getMethodHandleLocation());
          }
       parmSymbol = methodSym->comp()->getSymRefTab()->createParameterSymbol(methodSym, 0, TR::Address, knownObjectIndex);
       parmSymbol->setOrdinal(ordinal++);
