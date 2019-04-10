@@ -597,7 +597,14 @@ void TR_ResolvedMethod::makeParameterList(TR::ResolvedMethodSymbol *methodSym)
       }
    else
       {
-      parmSymbol = methodSym->comp()->getSymRefTab()->createParameterSymbol(methodSym, 0, TR::Address);
+      TR::KnownObjectTable::Index knownObjectIndex = TR::KnownObjectTable::UNKNOWN;
+      if (convertToMethod()->isArchetypeSpecimen() && !methodSym->comp()->getOption(TR_DisableArgSymRefWithKnownObjectIndex))
+         {
+         TR::KnownObjectTable *knot = methodSym->comp()->getOrCreateKnownObjectTable();
+         if (knot)
+            knownObjectIndex = knot->getExistingIndexAt(getMethodHandleLocation());
+         }
+      parmSymbol = methodSym->comp()->getSymRefTab()->createParameterSymbol(methodSym, 0, TR::Address, knownObjectIndex);
       parmSymbol->setOrdinal(ordinal++);
 
       int32_t len = classNameLen; // len is passed by reference and changes during the call

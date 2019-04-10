@@ -241,6 +241,7 @@ TR::OptionTable OMR::Options::_jitOptions[] = {
    {"disableAOTValidationOpts",           "O\tdisable AOT optimizations with validations",                      SET_OPTION_BIT(TR_DisableAOTCheckCastInlining | TR_DisableAOTInstanceOfInlining | TR_DisableAOTInstanceFieldResolution | TR_DisableAOTStaticField), "F"},
    {"disableAOTWarmRunThroughputImprovement", "O\tdisable change iprofiler entry choosing heuristic to improve aot warm run throughput",                      SET_OPTION_BIT(TR_DisableAOTWarmRunThroughputImprovement), "F"},
    {"disableArch11PackedToDFP",           "O\tdisable arch(11) packed to DFP conversion instructions",            SET_OPTION_BIT(TR_DisableArch11PackedToDFP), "F",},
+   {"disableArgSymRefWithKnownObjectIndex",           "O\tdisable arch(11) packed to DFP conversion instructions",            SET_OPTION_BIT(TR_DisableArgSymRefWithKnownObjectIndex), "F",},
    {"disableArrayCopyOpts",               "O\tdisable array copy optimiations",                SET_OPTION_BIT(TR_DisableArrayCopyOpts), "F"},
    {"disableArraySetOpts",                "O\tdisable array set optimiations",                 SET_OPTION_BIT(TR_DisableArraySetOpts), "F"},
    {"disableArraySetStoreElimination",     "O\tdisable arrayset store elimination",                SET_OPTION_BIT(TR_DisableArraysetStoreElimination), "F"},
