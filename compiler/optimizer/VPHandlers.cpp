@@ -5032,8 +5032,8 @@ static void devirtualizeCall(OMR::ValuePropagation *vp, TR::Node *node)
    if (methodSymbol->isComputed())
       {
 #ifdef J9_PROJECT_SPECIFIC
-      if (node->getSymbol()->getMethodSymbol()->getMethod()->isArchetypeSpecimen()
-               && vp->optimizer()->getOptimization(OMR::methodHandleInvokeInliningGroup)->requested())
+      if (node->getSymbol()->getMethodSymbol()->getMethod()->isArchetypeSpecimen())
+               //&& vp->optimizer()->getOptimization(OMR::methodHandleInvokeInliningGroup)->requested())
          {
          if (vp->trace())
             traceMsg(vp->comp(), "Not inlining call [%p] because the MethodHandle.invoke inlining group will do a better job\n", node);
