@@ -337,19 +337,18 @@ TR::Node *
 TR_VirtualGuard::createMutableCallSiteTargetGuard(TR::Compilation * comp, int16_t calleeIndex, TR::Node * node, TR::TreeTop * destination, uintptrj_t *mcsObject, TR::KnownObjectTable::Index mcsEpoch)
    {
    TR::SymbolReferenceTable *symRefTab = comp->getSymRefTab();
-   TR::SymbolReference *addressSymRef = symRefTab->createKnownStaticDataSymbolRef(0, TR::Address, mcsEpoch);
+   TR::SymbolReference *addressSymRef = symRefTab->createKnownStaticDataSymbolRef(0, TR::Address);
    addressSymRef->setSideEffectInfo();
-   TR::Node *receiver = node->getArgument(0);
+   TR::Node *flag = TR::Node::create(node, TR::iconst, 0, 0);
    TR::Node *load     = TR::Node::createWithSymRef(node, TR::aload,  0, addressSymRef);
-   TR::Node *guard    = TR::Node::createif(TR::ifacmpne, node, load, destination); // NOTE: take bytecode info from node so findVirtualGuardInfo works
-   guard->getAndDecChild(0);
-   guard->setAndIncChild(0, receiver);
+   TR::Node *guard    = TR::Node::createif(TR::ifacmpne, load, flag, destination); // NOTE: take bytecode info from node so findVirtualGuardInfo works
    setGuardKind(guard, TR_MutableCallSiteTargetGuard, comp);
 
    TR_VirtualGuard *vguard=new (comp->trHeapMemory()) TR_VirtualGuard(TR_DummyTest, TR_MutableCallSiteTargetGuard, comp, node, guard, comp->getCurrentInlinedSiteIndex());
    vguard->_mutableCallSiteObject = mcsObject;
    vguard->_mutableCallSiteEpoch  = mcsEpoch;
    vguard->dontGenerateChildrenCode();
+   vguard->setCannotBeRemoved();
    return guard;
    }
 
