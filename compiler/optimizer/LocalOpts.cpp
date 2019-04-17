@@ -7150,7 +7150,7 @@ static bool specializeInvokeExactSymbol(TR::Node *callNode, TR::KnownObjectTable
    if (resolvedMethod)
       {
       TR::SymbolReference      *specimenSymRef = comp->getSymRefTab()->findOrCreateMethodSymbol(owningMethod->getResolvedMethodIndex(), -1, resolvedMethod, TR::MethodSymbol::ComputedVirtual);
-      if (performTransformation(comp, "%sSubstituting more specific method symbol on %p: %s <- %s\n", opt->optDetailString(), callNode,
+      if (performTransformation(comp, "%sSubstituting more specific method symbol on %p: obj%d.%s <- %s\n", opt->optDetailString(), callNode, receiverIndex,
             specimenSymRef->getName(comp->getDebug()),
             callNode->getSymbolReference()->getName(comp->getDebug())))
          {
@@ -7328,7 +7328,10 @@ void TR_InvariantArgumentPreexistence::processIndirectCall(TR::Node *node, TR::T
       {
 #ifdef J9_PROJECT_SPECIFIC
       if (methodSymbol->getRecognizedMethod() == TR::java_lang_invoke_MethodHandle_invokeExact && receiverInfo.hasKnownObjectIndex())
+         {
          specializeInvokeExactSymbol(node, receiverInfo.getKnownObjectIndex(), comp(), this);
+         return;
+         }
 #endif
       }
    else if (devirtualize)
