@@ -4138,6 +4138,9 @@ void TR_InlinerBase::applyPolicyToTargets(TR_CallStack *callStack, TR_CallSite *
 
       TR_InlinerFailureReason checkInlineableTarget = getPolicy()->checkIfTargetInlineable(calltarget, callsite, comp());
 
+      if (DontInline_Callee == checkInlineableTarget)
+         traceMsg(comp(), "checkIfTargetInlineable return DontInline_Callee\n");
+
       if (checkInlineableTarget != InlineableTarget)
          {
          tracer()->insertCounter(checkInlineableTarget,callsite->_callNodeTreeTop);
@@ -4318,6 +4321,15 @@ TR_CallSite* TR_InlinerBase::findAndUpdateCallSiteInGraph(TR_CallStack *callStac
    for (callsite = calltarget->_myCallees.getFirst() ; callsite ; callsite = callsite->getNext())
       {
       debugTrace(tracer(),"callNode->getByteCodeIndex = %d callsite->_byteCodeIndex = %d",callNode->getByteCodeIndex(),callsite->_byteCodeIndex);
+      if (callsite->_initialCalleeMethod
+          && callsite->_initialCalleeMethod->convertToMethod()->isArchetypeSpecimen()
+          && !callNode->getSymbol()->castToMethodSymbol()->getMethod()->isArchetypeSpecimen())
+         continue;
+
+      if (callsite->_initialCalleeMethod
+          && callsite->_initialCalleeMethod->getRecognizedMethod() != callNode->getSymbol()->castToMethodSymbol()->getRecognizedMethod())
+         continue;
+
       if (callNode->getByteCodeIndex() == callsite->_byteCodeIndex)     // we have the call
          {
          foundCall = true;
