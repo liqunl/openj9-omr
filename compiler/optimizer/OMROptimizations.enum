@@ -79,6 +79,7 @@
    OPTIMIZATION(switchAnalyzer)
    OPTIMIZATION(compactLocals)
    OPTIMIZATION(varHandleTransformer)
+   OPTIMIZATION(jsr292Opts)
    OPTIMIZATION(unsafeFastPath)
    OPTIMIZATION(recognizedCallTransformer)
    OPTIMIZATION(coldBlockMarker)
