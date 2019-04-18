@@ -7643,6 +7643,9 @@ void TR_InvariantArgumentPreexistence::processIndirectCall(TR::Node *node, TR::T
 
 void TR_InvariantArgumentPreexistence::processIndirectLoad(TR::Node *node, TR::TreeTop *treeTop, vcount_t visitCount)
    {
+   if (node->getSymbolReference()->hasKnownObjectIndex())
+      return;
+
    TR::Node *ttNode       = treeTop->getNode();
    TR::Node *addressChild = node->getFirstChild();
    if (!addressChild->getOpCode().isLoadVar())
