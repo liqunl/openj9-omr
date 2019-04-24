@@ -894,12 +894,14 @@ TR_Debug::printIRTrees(TR::FILE *pOutFile, const char * title, TR::ResolvedMetho
          if (knot && meth && meth->convertToMethod()->isArchetypeSpecimen() && meth->getMethodHandleLocation())
             targetMethodHandleIndex = knot->getExistingIndexAt(meth->getMethodHandleLocation());
          if (targetMethodHandleIndex != TR::KnownObjectTable::UNKNOWN)
-            trfprintf(pOutFile, "obj%d.", targetMethodHandleIndex);
-
-         trfprintf(pOutFile, "%s\n",
-            _comp->compileRelocatableCode() ?
-                       ((TR_AOTMethodInfo *)ics._methodInfo)->resolvedMethod->signature(comp()->trMemory(), heapAlloc) :
-                       fe()->sampleSignature(ics._methodInfo, 0, 0, _comp->trMemory()));
+            trfprintf(pOutFile, "obj%d.%s\n", targetMethodHandleIndex, meth->signature(comp()->trMemory(), heapAlloc));
+         else
+            {
+            trfprintf(pOutFile, "%s\n",
+               _comp->compileRelocatableCode() ?
+                          ((TR_AOTMethodInfo *)ics._methodInfo)->resolvedMethod->signature(comp()->trMemory(), heapAlloc) :
+                          fe()->sampleSignature(ics._methodInfo, 0, 0, _comp->trMemory()));
+            }
 
          if (debug("printInlinePath"))
             {
