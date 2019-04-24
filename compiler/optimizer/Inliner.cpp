@@ -1785,6 +1785,27 @@ TR_InlinerBase::addGuardForVirtual(
    TR::Block * block3 = nextBBEndInCaller->getNode()->getBlock()->split(callNodeTreeTop, callerCFG);
    TR::Block * block4 = TR::Block::createEmptyBlock(callNode, comp());
 
+   if (guard->_kind == TR_MutableCallSiteTargetGuard){
+      TR::Node *methodHandleNode = callNode->getSecondChild();
+      TR::TreeTop * treetop = block1->getLastRealTreeTop();
+      while (treetop && treetop->getNode()->getOpCodeValue() != TR::BBStart){
+         if (treetop->getNode()->getOpCodeValue() == TR::NULLCHK &&
+            treetop->getNode()->getNullCheckReference() == methodHandleNode)
+         {
+         traceMsg(comp(), "found null check node %p\n", treetop->getNode());
+         TR::Node::recreate(treetop->getNode(), TR::treetop);
+         //TR::Node * passThru = TR::Node::create(TR::PassThrough, 1, methodHandleNode);
+         //TR::Node * newNullCheckNode = TR::Node::create(TR::NULLCHK, 1, passThru);
+         //TR::TreeTop::create(comp(), block4->getEntry(), newNullCheckNode);
+         //traceMsg(comp(), "new null check node %p\n", newNullCheckNode);
+         treetop = NULL;
+         }
+         else
+            treetop = treetop->getPrevTreeTop();
+      }
+      traceMsg(comp(), "TR_MutableCallSiteTargetGuard methodhandle node %p\n", methodHandleNode);
+   }
+
    TR::TreeTop *failedCallInsertionPoint = block4->getEntry()->getNextTreeTop();
 
    callerCFG->addNode(block4);
