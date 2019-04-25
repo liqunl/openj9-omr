@@ -5048,7 +5048,7 @@ static void devirtualizeCall(OMR::ValuePropagation *vp, TR::Node *node)
          if (constraint && constraint->getKnownObject() && knot)
             {
             TR::ResolvedMethodSymbol *owningMethod = symRef->getOwningMethodSymbol(vp->comp());
-            resolvedMethod = vp->comp()->fej9()->createMethodHandleArchetypeSpecimen(vp->trMemory(), knot->getPointerLocation(constraint->getKnownObject()->getIndex()), owningMethod->getResolvedMethod());
+            resolvedMethod = vp->comp()->fej9()->createMethodHandleArchetypeSpecimen(vp->trMemory(), knot->getPointerLocation(constraint->getKnownObject()->getIndex()), owningMethod->getResolvedMethod(), true);
             if (resolvedMethod)
                {
                TR::SymbolReference *specimenSymRef = vp->getSymRefTab()->findOrCreateMethodSymbol(owningMethod->getResolvedMethodIndex(), -1, resolvedMethod, TR::MethodSymbol::ComputedVirtual);
