@@ -1501,7 +1501,7 @@ int32_t OMR::Optimizer::performOptimization(const OptimizationStrategy *optimiza
 
       case IfMethodHandleInvokes:
          {
-         if (comp()->getMethodSymbol()->hasMethodHandleInvokes() && !comp()->getOption(TR_DisableMethodHandleInvokeOpts))
+         if (manager->requested())
             doThisOptimization = true;
          }
          break;
