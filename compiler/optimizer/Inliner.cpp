@@ -1146,6 +1146,7 @@ TR_InlineCall::inlineCall(TR::TreeTop * callNodeTreeTop, TR_OpaqueClassBlock * t
       if (comp()->trace(OMR::inlining))
          traceMsg(comp(), "inliner: Setting current inline depth=%d\n", currentInlineDepth);
 
+      // Arg info first created here
       calltarget->_prexArgInfo = new (trHeapMemory()) TR_PrexArgInfo(calltarget->_myCallSite->_callNode->getNumArguments(), trMemory());
 
       // this is called on a case-by-case basis, and can get repeatedly called for recursive
@@ -4519,6 +4520,24 @@ TR_CallSite* TR_InlinerBase::findAndUpdateCallSiteInGraph(TR_CallStack *callStac
 
    }
 
+TR_PrexArgInfo* TR_PrexArgInfo::argInfoFromCaller(TR::Node* callNode, TR_PrexArgInfo* argInfo, TR_PrexArgInfo* callerArgInfo, TR_InlinerTracer* tracer)
+   {
+   int32_t firstArgIndex = callNode->getFirstArgumentIndex();
+   int32_t numArgs = callNode->getNumArguments();
+   int32_t numChildren = callNode->getNumChildren();
+
+   for (int32_t i = firstArgIndex; i < numChildren; i++)
+      {
+      TR::Node* child = callNode->getChild(i);
+      if (TR_PrexArgInfo::hasArgInfoForChild(child, callerArgInfo))
+         {
+         heuristicTrace(tracer, "ARGS PROPAGATION: arg %d at callNode %p matches caller's arg %d", i, callNode, child->getSymbolReference()->getSymbol()->getParmSymbol()->getOrdinal());
+
+         argInfo->set(i - firstArgIndex, TR_PrexArgInfo::getArgForChild(child, callerArgInfo));
+         }
+      }
+   return argInfo;
+   }
 
 void TR_InlinerBase::inlineFromGraph(TR_CallStack *prevCallStack, TR_CallTarget *calltarget, TR_InnerPreexistenceInfo *innerPrexInfo)
    {
@@ -4591,11 +4610,33 @@ void TR_InlinerBase::inlineFromGraph(TR_CallStack *prevCallStack, TR_CallTarget 
 
             if (site)
                {
+               TR_PrexArgInfo* callerArgInfo = calltarget->_prexArgInfo;
+               TR_PrexArgInfo* argInfo = new (trStackMemory()) TR_PrexArgInfo(node->getNumArguments(), trMemory());
+               TR_PrexArgInfo* argsFromCaller = TR_PrexArgInfo::argInfoFromCaller(node, argInfo, callerArgInfo, tracer());
+
                for (int32_t i = 0; i < site->numTargets(); i++)
                   {
                   TR_CallTarget *target = site->getTarget(i);
+                  // Need to propagate and validate the arg info here, non-invariant arg info should have been cleared by now
+                  // Arg info from caller
+                  target->_prexArgInfo = TR_PrexArgInfo::enhance(target->_prexArgInfo, argsFromCaller, comp());;
                   getUtil()->computePrexInfo(target);
-                  targetsToInline.add(target);
+
+                  TR_PrexArgInfo* argsFromSymbol = TR_PrexArgInfo::buildPrexArgInfoForMethodSymbol(target->_calleeSymbol, tracer());
+                  // Validate the arg info at callsite and arg info from call target
+                  // If validation fails, we're inlining dead call
+                 if (TR_PrexArgInfo::validateAndPropagateArgsFromCalleeSymbol(argsFromSymbol, target->_prexArgInfo, tracer()))
+                    {
+                    targetsToInline.add(target);
+                    }
+                  else
+                    {
+                    TR::MethodSymbol * calleeSymbol = symRef->getSymbol()->castToMethodSymbol();
+                    if (calleeSymbol->getMethod())
+                       heuristicTrace(tracer(), "Block containing call node %p (callee name: %s) call is on the dead path. Skipping call.",node,
+                       calleeSymbol->getMethod()->signature(trMemory(), stackAlloc));
+                    tracer()->insertCounter(Dead_Call, tt);
+                    }
                   }
                }
             }
@@ -4810,6 +4851,9 @@ bool TR_InlinerBase::inlineCallTarget2(TR_CallStack * callStack, TR_CallTarget *
       comp()->dumpMethodTrees("after ilGen while inlining", calleeSymbol);
       }
 
+
+   // We have the trees now, we can check if each argument is invariant and clear the prex arg for the ones that are not
+   calltarget->_prexArgInfo->clearArgInfoForNonInvariantArguments(calltarget->_calleeSymbol, tracer());
 
    TR_InnerPreexistenceInfo *innerPrexInfo = getUtil()->createInnerPrexInfo(comp(), calleeSymbol, callStack, callNodeTreeTop, callNode, guard->_kind);
    if (calleeSymbol->mayHaveInlineableCall())
@@ -6291,8 +6335,8 @@ void TR_InlinerTracer::dumpPrexArgInfo(TR_PrexArgInfo* argInfo)
       if (arg && arg->getClass())
          {
          char* className = TR::Compiler->cls.classSignature(comp(), arg->getClass(), trMemory());
-         traceMsg( comp(),  "<Argument no=%d address=%p classIsFixed=%d classIsPreexistent=%d class=%p className= %s/>\n",
-         i, arg, arg->classIsFixed(), arg->classIsPreexistent(), arg->getClass(), className);
+         traceMsg( comp(),  "<Argument no=%d address=%p classIsFixed=%d classIsPreexistent=%d argIsKnownObject=%d class=%p className= %s/>\n",
+         i, arg, arg->classIsFixed(), arg->classIsPreexistent(), arg->hasKnownObjectIndex(), arg->getClass(), className);
          }
       else
          {
