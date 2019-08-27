@@ -695,6 +695,9 @@ class TR_InvariantArgumentPreexistence : public TR::Optimization
       void     setClassIsFixed()           { _classIsFixed = true; }
       bool     classIsFixed()              { return _classIsFixed; }
 
+      void     setClassIsPreexistent()     { _classIsPreexistent = true; }
+      bool     getClassIsPreexistent()     { return _classIsPreexistent; }
+
       void     setClassIsCurrentlyFinal()  { _classIsCurrentlyFinal = true; }
       bool     classIsCurrentlyFinal()     { return _classIsCurrentlyFinal; }
 
@@ -715,6 +718,7 @@ class TR_InvariantArgumentPreexistence : public TR::Optimization
 
       bool     _isNotInvariant;
       bool     _classIsFixed;
+      bool     _classIsPreexistent;
       bool     _classIsCurrentlyFinal;
       bool     _classIsRefined;
       };
