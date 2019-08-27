@@ -72,6 +72,7 @@ enum TR_InlinerFailureReason
    Needs_Method_Tracing,
    Will_Create_Unallowed_Temps,
    MT_Marked,
+   Dead_Call,
 
    Unknown_Reason
    };
@@ -117,6 +118,7 @@ static const char *TR_InlinerFailureReasonStr [] =
    FailureReasonStr( Needs_Method_Tracing ),
    FailureReasonStr( Will_Create_Unallowed_Temps ),
    FailureReasonStr( MT_Marked ),
+   FailureReasonStr( Dead_Call ),
 
    FailureReasonStr( Unknown_Reason ),
    };
