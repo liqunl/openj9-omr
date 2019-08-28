@@ -727,6 +727,7 @@ class TR_InvariantArgumentPreexistence : public TR::Optimization
    void processIndirectCall(TR::Node *node, TR::TreeTop *treeTop, vcount_t visitCount);
    void processIndirectLoad(TR::Node *node, TR::TreeTop *treeTop, vcount_t visitCount);
    bool convertCall(TR::Node *node, TR::TreeTop *treeTop);
+   void traceIfEnabled(const char* format, ...);
 
    ParmInfo *getSuitableParmInfo(TR::Node *node);
 
