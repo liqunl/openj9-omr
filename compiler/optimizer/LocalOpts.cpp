@@ -6867,47 +6867,16 @@ int32_t TR_InvariantArgumentPreexistence::perform()
                _parmInfo[index].setClassIsCurrentlyFinal();
                traceIfEnabled("PREX:      Parm %d class is currently final\n", index);
                }
-            }
-         }
-   if (_isOutermostMethod)
-      {
-      if (trace())
-         traceMsg(comp(), "PREX:    Populating parmInfo of outermost method %s\n", feMethod->signature(trMemory()));
 
-      int32_t index = 0;
-      for (TR::ParameterSymbol *p = parms.getFirst(); p != NULL; p = parms.getNext(), index++)
-         {
-         if (!_parmInfo[index].isInvariant())
-            continue;
-
-         int32_t len = 0;
-         const char *sig = p->getTypeSignature(len);
-
-         // liqun: why don't we set parm for primitive type?
-         if (*sig == 'L')
-            {
-            TR_OpaqueClassBlock *clazz = fe()->getClassFromSignature(sig, len, feMethod);
-            if (!clazz)
-               continue;
-
-            // liqun: need to get info from parm symbol
-            // symbol may be a fixed type, the fixed type should be more concrete than the type
-            // if symbol is a fixed type, or has known object index, we need to put it in parminfo
-            // this process should be the same for outer most method and inlined or peeking method
-
-            _parmInfo[index].setSymbol(p);
-            _parmInfo[index].setClassIsPreexistent();
-            _parmInfo[index].setClass(clazz);
-            traceIfEnabled("PREX:      Parm %d class %p is %.*s\n", index, clazz, len, sig);
-            if (!fe()->classHasBeenExtended(clazz))
+            if (p->hasKnownObjectIndex())
                {
-               _parmInfo[index].setClassIsCurrentlyFinal();
-               traceIfEnabled("PREX:      Parm %d class is currently final\n", index);
+               parmInfo.setKnownObjectIndex(p->getKnownObjectIndex());
+               traceIfEnabled("PREX:      Parm %d is known object\n", index);
                }
             }
          }
-      }
-   else if (comp()->isPeekingMethod() && comp()->getCurrentPeekingArgInfo())
+
+   if (comp()->isPeekingMethod() && comp()->getCurrentPeekingArgInfo())
    //comp()->getCurrentPeekingArgInfo() is supplied only in TR_J9EstimateCodeSize::realEstimateCodeSize,
    //so TR_InvariantArgumentPreexistence can validate preexistence args and propagate info onto parmSymbols
       {
