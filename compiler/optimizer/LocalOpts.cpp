@@ -6834,6 +6834,41 @@ int32_t TR_InvariantArgumentPreexistence::perform()
       }
 
    ListIterator<TR::ParameterSymbol> parms(&methodSymbol->getParameterList());
+   // arg info from method symbol?
+
+   // Get ParmInfo from method symbol
+      int32_t index = 0;
+      for (TR::ParameterSymbol *p = parms.getFirst(); p != NULL; p = parms.getNext(), index++)
+         {
+         if (!_parmInfo[index].isInvariant())
+            continue;
+
+         int32_t len = 0;
+         const char *sig = p->getTypeSignature(len);
+
+         // liqun: why don't we set parm for primitive type?
+         if (*sig == 'L')
+            {
+            TR_OpaqueClassBlock *clazz = fe()->getClassFromSignature(sig, len, feMethod);
+            if (!clazz)
+               continue;
+
+            // liqun: need to get info from parm symbol
+            // symbol may be a fixed type, the fixed type should be more concrete than the type
+            // if symbol is a fixed type, or has known object index, we need to put it in parminfo
+            // this process should be the same for outer most method and inlined or peeking method
+
+            _parmInfo[index].setSymbol(p);
+            _parmInfo[index].setClassIsPreexistent();
+            _parmInfo[index].setClass(clazz);
+            traceIfEnabled("PREX:      Parm %d class %p is %.*s\n", index, clazz, len, sig);
+            if (!fe()->classHasBeenExtended(clazz))
+               {
+               _parmInfo[index].setClassIsCurrentlyFinal();
+               traceIfEnabled("PREX:      Parm %d class is currently final\n", index);
+               }
+            }
+         }
    if (_isOutermostMethod)
       {
       if (trace())
@@ -7256,6 +7291,7 @@ void TR_InvariantArgumentPreexistence::processIndirectCall(TR::Node *node, TR::T
          TR_PersistentClassInfo *classInfo = NULL;
 
          bool needsAssumptions = false;
+         // liqun: why do we need assumption when class is fixed?
          if (!(receiverInfo.classIsRefined() && receiverInfo.classIsFixed()) && receiverSymbol &&
                (receiverSymbol->getParmSymbol()->getFixedType() == 0)) // liqun: need to add a field in ParmInfo to tell that we have a currently final field
             needsAssumptions = true;
