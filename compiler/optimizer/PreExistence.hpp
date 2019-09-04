@@ -56,7 +56,7 @@ class TR_PrexArgument
       _profiledClazz(profiledClazz),
       _knownObjectIndex(TR::KnownObjectTable::UNKNOWN),
       _isTypeInfoForInlinedBody(false)
-      { }
+      { TR_ASSERT(_classKind != ClassIsFixed || _clazz, "Fixed type must have a class"); }
 
    static const char *priorKnowledgeStrings[];
    static PrexKnowledgeLevel knowledgeLevel(TR_PrexArgument *pa);

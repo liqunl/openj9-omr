@@ -701,6 +701,9 @@ class TR_InvariantArgumentPreexistence : public TR::Optimization
       void     setClassIsRefined()         { _classIsRefined = true; }
       bool     classIsRefined()            { return _classIsRefined; }
 
+      void     setAssumptionHasBeenAdded()         { _assumptionHasBeenAdded = true; }
+      bool     assumptionHasBeenAdded()            { return _assumptionHasBeenAdded; }
+
       void     setClass(TR_OpaqueClassBlock *clazz) { _clazz = clazz; }
       TR_OpaqueClassBlock *getClass() { return _clazz; }
 
@@ -717,8 +720,10 @@ class TR_InvariantArgumentPreexistence : public TR::Optimization
       bool     _classIsFixed;
       bool     _classIsCurrentlyFinal;
       bool     _classIsRefined;
+      bool     _assumptionHasBeenAdded;
       };
 
+   void traceIfEnabled(const char* format, ...);
    void processNode        (TR::Node *node, TR::TreeTop *treeTop, vcount_t visitCount);
    void processIndirectCall(TR::Node *node, TR::TreeTop *treeTop, vcount_t visitCount);
    void processIndirectLoad(TR::Node *node, TR::TreeTop *treeTop, vcount_t visitCount);

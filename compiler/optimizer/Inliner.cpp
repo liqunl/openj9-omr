@@ -4422,6 +4422,7 @@ TR_CallSite* TR_InlinerBase::findAndUpdateCallSiteInGraph(TR_CallStack *callStac
       //find a matching target if there's any
       for (int32_t i = 0 ; i < callsite->numTargets() ; i++)
          {
+         // liqun: why it needs to be the same as the initial method? what if the call is devirtualized to a more specific method?
          if (callsite->getTarget(i)->_calleeMethod->isSameMethod(callsite->_initialCalleeSymbol->getResolvedMethod()) && i > 0)
             {
             TR_CallTarget* tempTarget = callsite->getTarget(0);
@@ -4454,6 +4455,8 @@ TR_CallSite* TR_InlinerBase::findAndUpdateCallSiteInGraph(TR_CallStack *callStac
          callsite->getTarget(i)->_guard->_type = TR_NonoverriddenTest;
          callsite->getTarget(i)->_guard->_thisClass = 0;
 
+         // liqun: if we have refined a method, and the call target is different?
+         // shouldn't we check if the targe is the same as callnode? if it is, then we don't need a guard?
          if (!callsite->getTarget(i)->_calleeMethod->isSameMethod(callsite->_initialCalleeSymbol->getResolvedMethod()))
             {
             callsite->getTarget(i)->_myCallees.setFirst(0);                // preventing furhter inlining as we now don't know what's beyond the new target
@@ -4478,8 +4481,8 @@ TR_CallSite* TR_InlinerBase::findAndUpdateCallSiteInGraph(TR_CallStack *callStac
             callsite->getTarget(i)->_calleeMethod = callsite->_initialCalleeSymbol->getResolvedMethod();
                }
             }
-            }
          }
+      }
 
    //if the code above kicked in this will only run once.
    for (int32_t i = 0 ; i< callsite->numTargets() ; i++)
@@ -4622,6 +4625,7 @@ void TR_InlinerBase::inlineFromGraph(TR_CallStack *prevCallStack, TR_CallTarget 
                   target->_prexArgInfo = TR_PrexArgInfo::enhance(target->_prexArgInfo, argsFromCaller, comp());;
                   getUtil()->computePrexInfo(target);
 
+                  // liqun: the following function is j9 specific
                   TR_PrexArgInfo* argsFromSymbol = TR_PrexArgInfo::buildPrexArgInfoForMethodSymbol(target->_calleeSymbol, tracer());
                   // Validate the arg info at callsite and arg info from call target
                   // If validation fails, we're inlining dead call
