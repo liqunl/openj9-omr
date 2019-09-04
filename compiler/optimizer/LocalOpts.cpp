@@ -6851,6 +6851,7 @@ int32_t TR_InvariantArgumentPreexistence::perform()
             if (knotIndex != TR::KnownObjectTable::UNKNOWN)
                {
                _parmInfo[index].setKnownObjectIndex(knotIndex);
+               p->setKnownObjectIndex(knotIndex);
                if (trace())
                   traceMsg(comp(), "PREX:      Receiver is obj%d\n", _parmInfo[index].getKnownObjectIndex());
                }
@@ -6866,7 +6867,7 @@ int32_t TR_InvariantArgumentPreexistence::perform()
          int32_t len = 0;
          const char *sig = p->getTypeSignature(len);
 
-         if (*sig == 'L')
+         if (*sig == 'L' && _parmInfo[index].isInvariant())
             {
             TR_OpaqueClassBlock *clazz = fe()->getClassFromSignature(sig, len, feMethod);
             _parmInfo[index].setSymbol(p);
@@ -6882,6 +6883,9 @@ int32_t TR_InvariantArgumentPreexistence::perform()
             }
          }
       }
+   // liqun: there is a bug here, we shouldn't set the parm info if the parm is variant
+   // also, we need to check if the arg info is compatible with the parm
+   // This code should be deprecated
    else if (comp()->isPeekingMethod() && comp()->getCurrentPeekingArgInfo())
    //comp()->getCurrentPeekingArgInfo() is supplied only in TR_J9EstimateCodeSize::realEstimateCodeSize,
    //so TR_InvariantArgumentPreexistence can validate preexistence args and propagate info onto parmSymbols
@@ -6903,8 +6907,11 @@ int32_t TR_InvariantArgumentPreexistence::perform()
          int32_t index = 0;
          for (TR::ParameterSymbol *p = parms.getFirst(); p != NULL; p = parms.getNext(), index++)
             {
+            if (!_parmInfo[index].isInvariant())
+               continue;
+
             const char *sig = NULL;
-            if (argInfo && argInfo[index])
+            if (argInfo && argInfo[index] && _parmInfo[index].isInvariant())
                {
                sig = argInfo[index];
                int32_t len = lenInfo[index];
@@ -6941,6 +6948,10 @@ int32_t TR_InvariantArgumentPreexistence::perform()
             {
             TR_PrexArgument *arg = argInfo->get(index);
             ParmInfo &parmInfo = _parmInfo[index];
+
+            if (!parmInfo.isInvariant())
+               continue;
+
             if (arg)
                {
                if (trace())
@@ -6956,26 +6967,41 @@ int32_t TR_InvariantArgumentPreexistence::perform()
             bool classIsFixed       = arg->classIsFixed();
             bool classIsPreexistent = arg->classIsPreexistent();
 
+
+            if (arg->hasKnownObjectIndex() && !(arg->getClass() && arg->classIsFixed()))
+               {
+               TR::KnownObjectTable *knot = comp()->getKnownObjectTable();
+                  {
+                  TR::ClassTableCriticalSection setClass(comp()->fe());
+                  TR_OpaqueClassBlock *fixedClazz = TR::Compiler->cls.objectClass(comp(), knot->getPointer(arg->getKnownObjectIndex()));
+                  arg->setClassIsFixed(fixedClazz);
+                  }
+               if (trace())
+                  traceMsg(comp(), "PREX:        Parm %d is known object obj%d\n", index, arg->getKnownObjectIndex());
+               }
+
             if (classIsFixed || classIsPreexistent)
                {
                int32_t len = 0;
                const char   *sig = p->getTypeSignature(len);
                TR_ASSERT(((*sig == 'L') || (*sig == '[')), "non address argument cannot be fixed/preexistent");
 
-               parmInfo.setSymbol(p);
                TR_OpaqueClassBlock *clazz = arg->getClass();
                TR_OpaqueClassBlock *clazzFromMethod = fe()->getClassFromSignature(sig, len, feMethod);
-               TR_ASSERT(!clazz ||
-                         !clazzFromMethod ||
-                         clazz == clazzFromMethod ||
-                         fe()->isInstanceOf(clazz, clazzFromMethod, true, true, true) == TR_yes,
-                         "Type from argInfo should be more specific clazz %p clazzFromMethod %p", clazz, clazzFromMethod);
 
+               // bail out if types are not compatible, which is a indicator that we're peeking or inlining dead path
+               if (clazz && clazzFromMethod && fe()->isInstanceOf(clazz, clazzFromMethod, true, true, true) != TR_yes)
+                  return 1;
+
+               parmInfo.setSymbol(p);
+               parmInfo.setKnownObjectIndex(arg->getKnownObjectIndex());
                if (classIsFixed)
                   {
+                  TR_ASSERT(clazz, "Prex argument with fixed type should have class info");
                   parmInfo.setClassIsFixed();
                   parmInfo.setClass(clazz);
                   parmInfo.setClassIsCurrentlyFinal();
+
                   if (trace())
                      {
                      char *clazzSig = TR::Compiler->cls.classSignature(comp(), clazz, trMemory());
@@ -7004,13 +7030,6 @@ int32_t TR_InvariantArgumentPreexistence::perform()
                      parmInfo.setClass(clazz);
                      }
                   }
-               }
-
-            if (arg->hasKnownObjectIndex())
-               {
-               parmInfo.setKnownObjectIndex(arg->getKnownObjectIndex());
-               if (trace())
-                  traceMsg(comp(), "PREX:        Parm %d is known object obj%d\n", index, arg->getKnownObjectIndex());
                }
             }
          }
@@ -7041,7 +7060,8 @@ int32_t TR_InvariantArgumentPreexistence::perform()
       // inlining of the same method with different arguments list.
       p->setFixedType(NULL);
       p->setIsPreexistent(false);
-      p->setKnownObjectIndex(TR::KnownObjectTable::UNKNOWN);
+      // liqun: can't clear what's already on the symbol
+      //p->setKnownObjectIndex(TR::KnownObjectTable::UNKNOWN);
       ParmInfo &info = _parmInfo[index];
       if (info.getSymbol())
          {
@@ -7075,19 +7095,22 @@ int32_t TR_InvariantArgumentPreexistence::perform()
                {
                if (arg->classIsFixed())
                   {
-                  symbol->setFixedType(arg->getClass());
+                  // liqun: need to stop doing this
+                  //symbol->setFixedType(arg->getClass());
                   if (trace())
                      traceMsg(comp(), "PREX:      Parm %d symbol [%p] has fixed type %p\n", index, symbol, symbol->getFixedType());
                   }
                if (arg->classIsPreexistent())
                   {
+                  // this is fine, as it just means the parm is invariant
                   symbol->setIsPreexistent(true);
                   if (trace())
                      traceMsg(comp(), "PREX:      Parm %d symbol [%p] is preexistent\n", index, symbol);
                   }
                if (arg->hasKnownObjectIndex())
                   {
-                  symbol->setKnownObjectIndex(arg->getKnownObjectIndex());
+                  // liqun: don't put known object index on parm symbol
+                  //symbol->setKnownObjectIndex(arg->getKnownObjectIndex());
                   if (trace())
                      traceMsg(comp(), "PREX:      Parm %d symbol [%p] is known object obj%d\n", index, symbol, symbol->getKnownObjectIndex());
                   }
@@ -7146,16 +7169,23 @@ TR_InvariantArgumentPreexistence::ParmInfo *TR_InvariantArgumentPreexistence::ge
 
    int32_t index = symbol->getParmSymbol()->getOrdinal();
    ParmInfo *info = _parmInfo + index;
+   // Don't set symbol on parm info if the parm is variant
    if (!info->getSymbol())
       return NULL;
 
    // The argument must be preexistent in order to allow us to devirtualize the dispatches.
    // Or if we are peeking - then it must be a refined type
    //
+   // liqun: If we're peeking, only devirtualize if type is refined, and it has to be fixed as well
+   // refined and: 1) fixed 2) currently final
    if (comp()->isPeekingMethod() && !info->classIsRefined())
       return NULL;
+
+   // liqun: why do we return different thing for peeking and non-peeking?
+   // here, it could be outer most method or we're during inlining
+   // only devirtualize if arg pre exist or has fixed type
    if (!comp()->isPeekingMethod() &&
-       !symbol->getParmSymbol()->getIsPreexistent() && symbol->getParmSymbol()->getFixedType() == 0)
+       !symbol->getParmSymbol()->getIsPreexistent() && (symbol->getParmSymbol()->getFixedType() == 0 && info->getFixedType() == 0))
       return NULL;
 
    return info;
@@ -7311,8 +7341,7 @@ void TR_InvariantArgumentPreexistence::processIndirectCall(TR::Node *node, TR::T
       }
    else if (devirtualize)
       {
-      // The class is fixed and the type is more refined than the signature.
-      // Try to refine the call
+      // The class is fixed and the type is more
 
       // We know the more specialized type for this object
       //
@@ -7328,6 +7357,9 @@ void TR_InvariantArgumentPreexistence::processIndirectCall(TR::Node *node, TR::T
          TR_PersistentClassInfo *classInfo = NULL;
 
          bool needsAssumptions = false;
+         // liqun: need assumption if receiver class is not fixed and is currently final
+         // problem is: receiver may not be from caller parm. If we have devirtualize a call and
+         // set fixed type on the call's receiver?
          if (!(receiverInfo.classIsRefined() && receiverInfo.classIsFixed()) && receiverSymbol &&
                (receiverSymbol->getParmSymbol()->getFixedType() == 0))
             needsAssumptions = true;
@@ -7375,7 +7407,21 @@ void TR_InvariantArgumentPreexistence::processIndirectCall(TR::Node *node, TR::T
          if (isModified && !(receiverInfo.classIsRefined() && receiverInfo.classIsFixed()) && receiverSymbol && receiverSymbol->getParmSymbol()->getFixedType() == 0)
             {
             // not classIsRefined && classIsFixed ==> classIsCurrentlyFinal case
-            receiverSymbol->getParmSymbol()->setFixedType(receiverInfo.getClass());
+            // liqun: don't set fixed type on parm, if we have prex arg, improve prex arg
+            // Only set type for outer most method, for inlining and peeking, improve the prex arg
+            if (_isOutermostMethod)
+               {
+               receiverSymbol->getParmSymbol()->setFixedType(receiverInfo.getClass());
+               }
+            else if (receiverParmOrdinal != -1 && comp()->getCurrentInlinedCallArgInfo())
+               {
+               TR_PrexArgInfo *argInfo = comp()->getCurrentInlinedCallArgInfo();
+               TR_PrexArgument *arg = argInfo->get(receiverParmOrdinal);
+               if (arg && !(arg->isClassFixed() && arg->getClass()))
+                  {
+                  arg->setFixedClass(receiverInfo.getClass());
+                  }
+               }
             TR_ASSERT(receiverInfo.getClass(), "Currently final classes must have a valid class pointer");
             bool inc = comp()->getCHTable()->recompileOnClassExtend(comp(), receiverInfo.getClass());
             if (classInfo && inc) classInfo->incNumPrexAssumptions();
@@ -7390,6 +7436,7 @@ void TR_InvariantArgumentPreexistence::processIndirectCall(TR::Node *node, TR::T
       // If the method being called is currently not overridden, we can register
       // a recomp action on the method-override event for this method
       //
+      // liqun: we need to change this assertion if we were to fix IAP completely
       TR_ASSERT((fixedOrFinalInfoExists || (receiverSymbol->getParmSymbol()->getFixedType() == 0)),
          "Symbol %p is fixed ref type - but is not marked to be currently final (fixedOrFinalInfoExists=%d, fixedType=%p)", receiverSymbol, fixedOrFinalInfoExists, receiverSymbol->getParmSymbol()->getFixedType());
 
