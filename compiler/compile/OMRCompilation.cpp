@@ -899,10 +899,14 @@ OMR::Compilation::getProfilingMode()
    if (!self()->isProfilingCompilation())
       return DisabledProfiling;
 
+#if defined(TR_HOST_X86) && defined(TR_HOST_32BIT)
+   return JitProfiling;
+#else
    if (self()->getOption(TR_EnableJProfiling) || !self()->getOption(TR_DisableJProfilingInProfilingCompilations))
       return JProfiling;
 
    return JitProfiling;
+#endif
    }
 
 bool
