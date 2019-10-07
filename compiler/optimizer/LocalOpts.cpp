@@ -7101,7 +7101,8 @@ void TR_InvariantArgumentPreexistence::processIndirectCall(TR::Node *node, TR::T
    bool  devirtualize            = false;
    bool  fixedOrFinalInfoExists  = false;
    bool  isInterface             = false;
-   ParmInfo           receiverInfo;  receiverInfo.clear();
+   ParmInfo           tmpInfo;  tmpInfo.clear();
+   ParmInfo           &receiverInfo = tmpInfo;
    TR::Symbol          *receiverSymbol = NULL;
    int32_t            receiverParmOrdinal = -1;
    ParmInfo *existingInfo = NULL;
@@ -7147,7 +7148,8 @@ void TR_InvariantArgumentPreexistence::processIndirectCall(TR::Node *node, TR::T
 
          traceIfEnabled("PREX:        Receiver is %p incoming Parm %d parmInfo %p\n", receiver, receiverParmOrdinal, existingInfo);
 
-         if ((receiverInfo.classIsRefined() && receiverInfo.classIsFixed()) || receiverInfo.classIsCurrentlyFinal())
+         // should devirtualize if info is fixed
+         if (receiverInfo.classIsFixed() || receiverInfo.classIsCurrentlyFinal())
             fixedOrFinalInfoExists = true;
 
          }
@@ -7175,19 +7177,24 @@ void TR_InvariantArgumentPreexistence::processIndirectCall(TR::Node *node, TR::T
       fixedOrFinalInfoExists = true;
       }
 
-   if (methodSymbol->isVirtual() && fixedOrFinalInfoExists)
+   if (resolvedMethod)
       {
       TR_OpaqueClassBlock *clazz = resolvedMethod->containingClass();
       if (clazz)
-         {
-         TR_OpaqueClassBlock *thisClazz = receiverInfo.getClass();
-         if (thisClazz)
-            {
-            TR_YesNoMaybe isInstance = fe()->isInstanceOf(thisClazz, clazz, true);
-            if (isInstance == TR_yes)
-               devirtualize = true;
-            }
+	 {
+	 TR_OpaqueClassBlock *thisClazz = receiverInfo.getClass();
+	 if (thisClazz)
+	    {
+	    TR_YesNoMaybe isInstance = fe()->isInstanceOf(thisClazz, clazz, true);
+	    if (isInstance != TR_yes)
+	      return; // liqun: class info not compatible with the method, should not proceed?
+	    }
          }
+      }
+
+   if (methodSymbol->isVirtual() && fixedOrFinalInfoExists)
+      {
+      devirtualize = true;
       }
 
    //
@@ -7231,7 +7238,7 @@ void TR_InvariantArgumentPreexistence::processIndirectCall(TR::Node *node, TR::T
          // problem is: receiver may not be from caller parm. If we have devirtualize a call and
          // set fixed type on the call's receiver?
          // what if receiver is not refined but the class is fixed?
-         if (!(receiverInfo.classIsRefined() && receiverInfo.classIsFixed()) && !receiverInfo.assumptionHasBeenAdded())
+         if (!receiverInfo.classIsFixed())
             needsAssumptions = true;
 
          if (comp()->ilGenRequest().details().supportsInvalidation())
@@ -7274,8 +7281,10 @@ void TR_InvariantArgumentPreexistence::processIndirectCall(TR::Node *node, TR::T
                }
             }
 
-         if (isModified && !(receiverInfo.classIsRefined() && receiverInfo.classIsFixed()) && existingInfo && !existingInfo->assumptionHasBeenAdded())
+         if (isModified && needsAssumptions)
             {
+            // improve receiverInfo
+            receiverInfo.setClassIsFixed();
             // not classIsRefined && classIsFixed ==> classIsCurrentlyFinal case
             // liqun: don't set fixed type on parm, if we have prex arg, improve prex arg
             // Only set type for outer most method, for inlining and peeking, improve the prex arg
@@ -7303,7 +7312,7 @@ void TR_InvariantArgumentPreexistence::processIndirectCall(TR::Node *node, TR::T
       else if (!TR::Compiler->cls.isInterfaceClass(comp(), receiverInfo.getClass()))
          TR_ASSERT(0, "how can it be unresolved?");
       }
-   else if (receiverSymbol)
+   else if (receiverSymbol) // liqun: if receiver is parm and can't devirtualize, i.e. not fixed nor currently final, should replace this with something more meaningful, existingInfo or isParm
       {
       // liqun: if receiver is from caller argument
       //
@@ -7311,9 +7320,11 @@ void TR_InvariantArgumentPreexistence::processIndirectCall(TR::Node *node, TR::T
       // a recomp action on the method-override event for this method
       //
       // liqun: we need to change this assertion if we were to fix IAP completely
+      // liqun: ? what does the assert mean?
       TR_ASSERT(fixedOrFinalInfoExists || !existingInfo->assumptionHasBeenAdded(),
          "Symbol %p is fixed ref type - but is not marked to be currently final (fixedOrFinalInfoExists=%d, fixedType=%p)", receiverSymbol, fixedOrFinalInfoExists, receiverSymbol->getParmSymbol()->getFixedType());
 
+      // liqun: has to be a concreate virtual method
       if (!isInterface && !resolvedMethod->virtualMethodIsOverridden() && !resolvedMethod->isAbstract())
          {
          // if the number of recompile assumptions on this particular
