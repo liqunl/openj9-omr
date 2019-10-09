@@ -3483,6 +3483,11 @@ OMR::Node::devirtualizeCall(TR::TreeTop *treeTop)
          self()->setChild(i - 1, self()->getChild(i));
 
       self()->setNumChildren(numChildren - 1);
+
+      if (treeTop->getNode()->getOpCodeValue() == TR::ResolveCHK)
+         TR::Node::recreate(treeTop->getNode(), TR::treetop);
+      else if (treeTop->getNode()->getOpCodeValue() == TR::ResolveAndNULLCHK)
+         TR::Node::recreate(treeTop->getNode(), TR::NULLCHK);
       }
    }
 

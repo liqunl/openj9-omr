@@ -1709,6 +1709,7 @@ OMR::SymbolReferenceTable::createParameterSymbol(
    else
       symRef = createTempSymRefWithKnownObject(sym, owningMethodSymbol->getResolvedMethodIndex(), slot, knownObjectIndex);
 
+   sym->setKnownObjectIndex(knownObjectIndex);
    owningMethodSymbol->setParmSymRef(slot, symRef);
    owningMethodSymbol->getAutoSymRefs(slot).add(symRef);
 

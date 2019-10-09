@@ -6830,6 +6830,7 @@ int32_t TR_InvariantArgumentPreexistence::perform()
       return 1;
       }
 
+   TR::KnownObjectTable *knot = comp()->getKnownObjectTable();
    // liqun: there could be known object index on the parm symbol
    ListIterator<TR::ParameterSymbol> parms(&methodSymbol->getParameterList());
    int32_t index = 0;
@@ -6840,16 +6841,43 @@ int32_t TR_InvariantArgumentPreexistence::perform()
        const char *sig = p->getTypeSignature(len);
        if (*sig != 'L' || !parmInfo.isInvariant())
           continue;
-       p->setIsPreexistent(true);
-       TR_OpaqueClassBlock *clazz = fe()->getClassFromSignature(sig, len, feMethod);
-       parmInfo.setSymbol(p);
-       if (clazz && !fe()->classHasBeenExtended(clazz))
+
+       if (_isOutermostMethod)
           {
-          parmInfo.setClassIsCurrentlyFinal();
-          traceIfEnabled("PREX:      Receiver class is currently final\n");
+          p->setIsPreexistent(true);
+          parmInfo.setClassIsPreexistent();
           }
-       _parmInfo[index].setClass(clazz);
-       traceIfEnabled("PREX:      Receiver class %p is %.*s\n", clazz, len, sig);
+
+       parmInfo.setSymbol(p);
+       //TR::SymbolReference* symRef = methodSymbol->getParmSymRef(index);
+       if (p->hasKnownObjectIndex())
+          {
+          // liqun: shouldn't this be exclusive vm access? as we want to dereference the known object and get its class
+          TR::VMAccessCriticalSection setClass(comp());
+          TR_OpaqueClassBlock *fixedClazz = TR::Compiler->cls.objectClass(comp(), knot->getPointer(p->getKnownObjectIndex()));
+          parmInfo.setClassIsFixed();
+          parmInfo.setClass(fixedClazz);
+          traceIfEnabled("PREX:      parm %d is known object obj.%d\n", index, p->getKnownObjectIndex());
+          }
+       else
+          {
+          TR_OpaqueClassBlock *clazz = fe()->getClassFromSignature(sig, len, feMethod);
+          if (!clazz) continue;
+
+          if (comp()->fej9()->isClassFinal(clazz))
+             {
+             traceIfEnabled("PREX:      parm %d class is final\n", index);
+             parmInfo.setClassIsFixed();
+             }
+          else if (!fe()->classHasBeenExtended(clazz))
+             {
+             traceIfEnabled("PREX:      parm %d class is currently final\n", index);
+             parmInfo.setClassIsCurrentlyFinal();
+             }
+
+          parmInfo.setClass(clazz);
+          traceIfEnabled("PREX:      parm %d class %p is %.*s\n", index, clazz, len, sig);
+          }
        }
 
    // liqun: there is a bug here, we shouldn't set the parm info if the parm is variant
@@ -6920,7 +6948,7 @@ int32_t TR_InvariantArgumentPreexistence::perform()
             ParmInfo &parmInfo = _parmInfo[index];
             TR_OpaqueClassBlock *clazzFromMethod = parmInfo.getClass();
 
-            if (!parmInfo.isInvariant() || !clazzFromMethod)
+            if (!parmInfo.isInvariant() || parmInfo.hasKnownObjectIndex() || !clazzFromMethod)
                continue;
 
             if (!arg)
@@ -6933,7 +6961,6 @@ int32_t TR_InvariantArgumentPreexistence::perform()
 
             if (arg->hasKnownObjectIndex() && !(arg->getClass() && arg->classIsFixed()))
                {
-               TR::KnownObjectTable *knot = comp()->getKnownObjectTable();
                   {
                   // liqun: shouldn't this be exclusive vm access? as we want to dereference the known object and get its class
                   TR::VMAccessCriticalSection setClass(comp());
@@ -6950,7 +6977,7 @@ int32_t TR_InvariantArgumentPreexistence::perform()
 
             TR_OpaqueClassBlock *clazz = arg->getClass() ? arg->getClass() : clazzFromMethod;
 
-            // bail out if types are not compatible, which is a indicator that we're peeking or inlining dead path
+            // bail out if types are not compatible, which is an indicator that we're peeking or inlining dead path
             if (clazz != clazzFromMethod && fe()->isInstanceOf(clazz, clazzFromMethod, true, true, true) != TR_yes)
                return 1;
 
@@ -6968,14 +6995,15 @@ int32_t TR_InvariantArgumentPreexistence::perform()
                traceIfEnabled("PREX:          Parm %d class is refined -- declared as %s\n", index, sig);
                }
 
-            if (classIsFixed)
+            if (classIsFixed || comp()->fej9()->isClassFinal(clazz))
                {
                parmInfo.setClassIsFixed();
-               traceIfEnabled("PREX:        Parm %d class %p is currently final %s\n", index, clazz, sig);
+               traceIfEnabled("PREX:        Parm %d class %p is final %s\n", index, clazz, sig);
                }
             else // if (classIsPreexistent)
                {
                traceIfEnabled("PREX:        Parm %d class %p is %s\n", index, clazz, sig);
+               parmInfo.setClassIsPreexistent();
                if (!fe()->classHasBeenExtended(clazz))
                   {
                   parmInfo.setClassIsCurrentlyFinal();
@@ -6984,7 +7012,7 @@ int32_t TR_InvariantArgumentPreexistence::perform()
                }
             }
          }
-      else
+      else if (!_isOutermostMethod)
          {
          traceIfEnabled("PREX:    No argInfo -- can't populate parmInfo for inlined method %s\n", feMethod->signature(trMemory()));
          }
@@ -7044,8 +7072,9 @@ TR_InvariantArgumentPreexistence::ParmInfo *TR_InvariantArgumentPreexistence::ge
 
    if (comp()->isPeekingMethod() && !info->classIsRefined())
       return NULL;
+
    if (!comp()->isPeekingMethod() &&
-       !info->isInvariant() && !info->classIsFixed())
+       !info->classIsPreexistent() && !info->classIsFixed())
       return NULL;
 
 
@@ -7057,8 +7086,9 @@ TR_InvariantArgumentPreexistence::ParmInfo *TR_InvariantArgumentPreexistence::ge
    // we can do devirtualization even if class is not refined, as long as it's fixed, this doesn't need assumption
    // currently final needs assumption
    // Added condition will make us devirtualize more calls in peeking
-   if (comp()->isPeekingMethod() && !info->classIsRefined() && !info->classIsFixed() && !info->classIsCurrentlyFinal())
-      return NULL;
+   //if (comp()->isPeekingMethod() && !info->classIsRefined() && !info->classIsFixed() && !info->classIsCurrentlyFinal())
+//   if (comp()->isPeekingMethod() && !info->classIsFixed() && !info->classIsCurrentlyFinal())
+//      return NULL;
 
    return info;
    }
@@ -7077,7 +7107,67 @@ void TR_InvariantArgumentPreexistence::processNode(TR::Node *node, TR::TreeTop *
       processIndirectLoad(node, treeTop, visitCount);
    else if (node->getOpCode().isCallIndirect())
       processIndirectCall(node, treeTop, visitCount);
+   }
 
+TR_YesNoMaybe TR_InvariantArgumentPreexistence::classIsCompatibleWithMethod(TR_OpaqueClassBlock* thisClazz, TR_ResolvedMethod* method)
+   {
+   TR_OpaqueClassBlock *clazz = method->containingClass();
+
+   if (clazz)
+      {
+      if (thisClazz)
+         {
+         return fe()->isInstanceOf(thisClazz, clazz, true);
+         }
+      }
+   return TR_maybe;
+   }
+
+bool TR_InvariantArgumentPreexistence::devirtualizeCall(TR::Node *node, TR::TreeTop *treeTop, TR_OpaqueClassBlock* clazz)
+   {
+   TR::MethodSymbol   *methodSymbol   = node->getSymbol()->castToMethodSymbol();
+   TR_ResolvedMethod *resolvedMethod = methodSymbol->getResolvedMethodSymbol()? methodSymbol->getResolvedMethodSymbol()->getResolvedMethod() : NULL;
+   TR_ASSERT(classIsComatibleWithMethod(clazz, resolvedMethod) == TR_yes, "Class should be compatible with method");
+   TR::SymbolReference *symRef = node->getSymbolReference();
+   int32_t offset = symRef->getOffset();
+   TR_ResolvedMethod *refinedMethod = symRef->getOwningMethod(comp())->getResolvedVirtualMethod(comp(), clazz, offset);
+
+   if (!performTransformation(comp(), "%sspecialize and devirtualize invoke [%p] on currently fixed or final parameter\n", optDetailString(), node))
+      return false;
+
+   if (!refinedMethod->isSameMethod(resolvedMethod))
+      {
+      TR::SymbolReference *newSymRef =
+          getSymRefTab()->findOrCreateMethodSymbol
+          (symRef->getOwningMethodIndex(), -1, refinedMethod, TR::MethodSymbol::Virtual);
+      newSymRef->copyAliasSets(symRef, getSymRefTab());
+      newSymRef->setOffset(offset);
+      node->setSymbolReference(newSymRef);
+      node->devirtualizeCall(treeTop);
+      return true;
+      }
+
+   node->devirtualizeCall(treeTop);
+   return true;
+   }
+
+bool TR_InvariantArgumentPreexistence::supportsInvalidation(TR_PersistentClassInfo* classInfo)
+   {
+   if (!comp()->ilGenRequest().details().supportsInvalidation())
+      return false;
+
+
+   // if the number of recompile assumptions on this particular
+   // class has exceeded a threshold, don't do prex anymore for this class
+   //
+   if (comp()->getMethodHotness() == warm)
+      {
+       if (classInfo &&
+           classInfo->getNumPrexAssumptions() > comp()->getOptions()->getMaxNumPrexAssumptions())
+          return false;
+      }
+
+   return true;
    }
 
 void TR_InvariantArgumentPreexistence::processIndirectCall(TR::Node *node, TR::TreeTop *treeTop, vcount_t visitCount)
@@ -7102,7 +7192,7 @@ void TR_InvariantArgumentPreexistence::processIndirectCall(TR::Node *node, TR::T
    bool  fixedOrFinalInfoExists  = false;
    bool  isInterface             = false;
    ParmInfo           tmpInfo;  tmpInfo.clear();
-   ParmInfo           &receiverInfo = tmpInfo;
+   ParmInfo           *receiverInfo = &tmpInfo;
    TR::Symbol          *receiverSymbol = NULL;
    int32_t            receiverParmOrdinal = -1;
    ParmInfo *existingInfo = NULL;
@@ -7132,7 +7222,7 @@ void TR_InvariantArgumentPreexistence::processIndirectCall(TR::Node *node, TR::T
          return;
          }
 
-      receiverInfo = *existingInfo;
+      receiverInfo = existingInfo;
 
       receiverSymbol = receiver->getSymbolReference()->getSymbol();
       receiverParmOrdinal = receiverSymbol->getParmSymbol()->getOrdinal();
@@ -7149,7 +7239,7 @@ void TR_InvariantArgumentPreexistence::processIndirectCall(TR::Node *node, TR::T
          traceIfEnabled("PREX:        Receiver is %p incoming Parm %d parmInfo %p\n", receiver, receiverParmOrdinal, existingInfo);
 
          // should devirtualize if info is fixed
-         if (receiverInfo.classIsFixed() || receiverInfo.classIsCurrentlyFinal())
+         if (receiverInfo->classIsFixed() || receiverInfo->classIsCurrentlyFinal())
             fixedOrFinalInfoExists = true;
 
          }
@@ -7158,11 +7248,12 @@ void TR_InvariantArgumentPreexistence::processIndirectCall(TR::Node *node, TR::T
    // liqun: one possiblity: receiverInfo has koi, but existingInfo doesn't
    // Bonus goodies for known objects
    //
-   if (receiver->getSymbolReference()->hasKnownObjectIndex())
+   if (receiver->getSymbolReference() && receiver->getSymbolReference()->hasKnownObjectIndex())
       {
       traceIfEnabled("PREX:          Receiver is obj%d\n", receiver->getSymbolReference()->getKnownObjectIndex());
 
-      receiverInfo.setKnownObjectIndex(receiver->getSymbolReference()->getKnownObjectIndex());
+      receiverInfo->setKnownObjectIndex(receiver->getSymbolReference()->getKnownObjectIndex());
+      receiverInfo->setClassIsFixed();
 
       // Also set the class info
       //
@@ -7170,32 +7261,13 @@ void TR_InvariantArgumentPreexistence::processIndirectCall(TR::Node *node, TR::T
 
          {
          TR::ClassTableCriticalSection setClass(comp()->fe());
-         receiverInfo.setClass(TR::Compiler->cls.objectClass(comp(), knot->getPointer(receiver->getSymbolReference()->getKnownObjectIndex())));
-         }
-
-      receiverInfo.setClassIsFixed();
-      fixedOrFinalInfoExists = true;
-      }
-
-   if (resolvedMethod)
-      {
-      TR_OpaqueClassBlock *clazz = resolvedMethod->containingClass();
-      if (clazz)
-	 {
-	 TR_OpaqueClassBlock *thisClazz = receiverInfo.getClass();
-	 if (thisClazz)
-	    {
-	    TR_YesNoMaybe isInstance = fe()->isInstanceOf(thisClazz, clazz, true);
-	    if (isInstance != TR_yes)
-	      return; // liqun: class info not compatible with the method, should not proceed?
-	    }
+         receiverInfo->setClass(TR::Compiler->cls.objectClass(comp(), knot->getPointer(receiver->getSymbolReference()->getKnownObjectIndex())));
          }
       }
 
-   if (methodSymbol->isVirtual() && fixedOrFinalInfoExists)
-      {
-      devirtualize = true;
-      }
+   // liqun: what about interface method
+   if (resolvedMethod && !classIsCompatibleWithMethod(receiverInfo->getClass(), resolvedMethod))
+      return;
 
    //
    // Step 2: Transform
@@ -7205,8 +7277,8 @@ void TR_InvariantArgumentPreexistence::processIndirectCall(TR::Node *node, TR::T
    if (methodSymbol->isComputed())
       {
 #ifdef J9_PROJECT_SPECIFIC
-      if (methodSymbol->getRecognizedMethod() == TR::java_lang_invoke_MethodHandle_invokeExact && receiverInfo.hasKnownObjectIndex())
-         specializeInvokeExactSymbol(node, receiverInfo.getKnownObjectIndex(), comp(), this);
+      if (methodSymbol->getRecognizedMethod() == TR::java_lang_invoke_MethodHandle_invokeExact && receiverInfo->hasKnownObjectIndex())
+         specializeInvokeExactSymbol(node, receiverInfo->getKnownObjectIndex(), comp(), this);
 
       // The method is a specialized thunk archetype, no further improvement is needed.
       // Keeping running subsequent code may result in a crash because `offset` on the symref is not valid.
@@ -7214,103 +7286,44 @@ void TR_InvariantArgumentPreexistence::processIndirectCall(TR::Node *node, TR::T
          return;
 #endif
       }
-   else if (devirtualize)
+   else if (!isInterface && receiverInfo->classIsFixed())
       {
-      // The class is fixed and the type is more refined than the signature.
-      // Try to refine the call
+      devirtualizeCall(node, treeTop, receiverInfo->getClass());
+      }
+   else if (!isInterface && receiverInfo->classIsCurrentlyFinal())
+      {
+      TR_PersistentClassInfo* classInfo = comp()->getPersistentInfo()->getPersistentCHTable()->findClassInfoAfterLocking(receiverInfo->getClass(), comp());
 
-
-      // We know the more specialized type for this object
-      //
-      TR::SymbolReference *symRef = node->getSymbolReference();
-      int32_t offset = symRef->getOffset();
-      TR_ResolvedMethod *refinedMethod = symRef->getOwningMethod(comp())->getResolvedVirtualMethod(comp(), receiverInfo.getClass(), offset);
-
-
-      if (refinedMethod)
+      // liqun: need assumption if receiver class is not fixed and is currently final
+      // problem is: receiver may not be from caller parm. If we have devirtualize a call and
+      // set fixed type on the call's receiver?
+      // what if receiver is not refined but the class is fixed?
+      if (supportsInvalidation(classInfo) &&
+          devirtualizeCall(node, treeTop, receiverInfo->getClass()))
          {
-         bool isModified = false;
-         bool addAssumptions = false;
-         TR_PersistentClassInfo *classInfo = NULL;
-
-         bool needsAssumptions = false;
-         // liqun: need assumption if receiver class is not fixed and is currently final
-         // problem is: receiver may not be from caller parm. If we have devirtualize a call and
-         // set fixed type on the call's receiver?
-         // what if receiver is not refined but the class is fixed?
-         if (!receiverInfo.classIsFixed())
-            needsAssumptions = true;
-
-         if (comp()->ilGenRequest().details().supportsInvalidation())
+         traceIfEnabled("devirtualize with assumption\n");
+         // improve receiverInfo
+         receiverInfo->setClassIsFixed();
+         // not classIsRefined && classIsFixed ==> classIsCurrentlyFinal case
+         // liqun: don't set fixed type on parm, if we have prex arg, improve prex arg
+         // Only set type for outer most method, for inlining and peeking, improve the prex arg
+         if (_isOutermostMethod && receiverSymbol->getParmSymbol())
             {
-            addAssumptions = true;
-            if (needsAssumptions)
+            receiverSymbol->getParmSymbol()->setFixedType(receiverInfo->getClass());
+            }
+         else if (receiverParmOrdinal != -1 && comp()->getCurrentInlinedCallArgInfo())
+            {
+            TR_PrexArgInfo *argInfo = comp()->getCurrentInlinedCallArgInfo();
+            TR_PrexArgument *arg = argInfo->get(receiverParmOrdinal);
+            if (arg && !(arg->classIsFixed() && arg->getClass()))
                {
-               classInfo = comp()->getPersistentInfo()->getPersistentCHTable()->findClassInfoAfterLocking(receiverInfo.getClass(), comp());
-
-               // if the number of recompile assumptions on this particular
-               // class has exceeded a threshold, don't do prex anymore for this class
-               //
-               if ((comp()->getMethodHotness() == warm) &&
-                     classInfo &&
-                     classInfo->getNumPrexAssumptions() > comp()->getOptions()->getMaxNumPrexAssumptions())
-                  addAssumptions = false;
+               arg->setClassIsFixed(receiverInfo->getClass());
                }
             }
-
-         if (!needsAssumptions || addAssumptions)
-            {
-            if (!refinedMethod->isSameMethod(resolvedMethod))
-               {
-               if (performTransformation(comp(), "%sspecialize and devirtualize invoke [%p] on currently fixed or final parameter %d [%p]\n", optDetailString(), node, receiverParmOrdinal, receiverSymbol))
-                  {
-                  TR::SymbolReference *newSymRef =
-                      getSymRefTab()->findOrCreateMethodSymbol
-                      (symRef->getOwningMethodIndex(), -1, refinedMethod, TR::MethodSymbol::Virtual);
-                  newSymRef->copyAliasSets(symRef, getSymRefTab());
-                  newSymRef->setOffset(offset);
-                  node->setSymbolReference(newSymRef);
-                  node->devirtualizeCall(treeTop);
-                  isModified = true;
-                  }
-               }
-            else if (performTransformation(comp(), "%sdevirtualize invoke [%p] on currently fixed or final parameter  %d [%p]\n", optDetailString(), node, receiverParmOrdinal, receiverSymbol))
-               {
-               node->devirtualizeCall(treeTop);
-               isModified = true;
-               }
-            }
-
-         if (isModified && needsAssumptions)
-            {
-            // improve receiverInfo
-            receiverInfo.setClassIsFixed();
-            // not classIsRefined && classIsFixed ==> classIsCurrentlyFinal case
-            // liqun: don't set fixed type on parm, if we have prex arg, improve prex arg
-            // Only set type for outer most method, for inlining and peeking, improve the prex arg
-            if (_isOutermostMethod && receiverSymbol->getParmSymbol())
-               {
-               receiverSymbol->getParmSymbol()->setFixedType(receiverInfo.getClass());
-               existingInfo->setAssumptionHasBeenAdded();
-               }
-            else if (receiverParmOrdinal != -1 && comp()->getCurrentInlinedCallArgInfo())
-               {
-               TR_PrexArgInfo *argInfo = comp()->getCurrentInlinedCallArgInfo();
-               TR_PrexArgument *arg = argInfo->get(receiverParmOrdinal);
-               if (arg && !(arg->classIsFixed() && arg->getClass()))
-                  {
-                  arg->setClassIsFixed(receiverInfo.getClass());
-                  existingInfo->setAssumptionHasBeenAdded();
-                  }
-               }
-            TR_ASSERT(receiverInfo.getClass(), "Currently final classes must have a valid class pointer");
-            bool inc = comp()->getCHTable()->recompileOnClassExtend(comp(), receiverInfo.getClass());
-            if (classInfo && inc) classInfo->incNumPrexAssumptions();
-            _success = true;
-            }
+         TR_ASSERT(receiverInfo->getClass(), "Currently final classes must have a valid class pointer");
+         bool inc = comp()->getCHTable()->recompileOnClassExtend(comp(), receiverInfo->getClass());
+         if (classInfo && inc) classInfo->incNumPrexAssumptions();
          }
-      else if (!TR::Compiler->cls.isInterfaceClass(comp(), receiverInfo.getClass()))
-         TR_ASSERT(0, "how can it be unresolved?");
       }
    else if (receiverSymbol) // liqun: if receiver is parm and can't devirtualize, i.e. not fixed nor currently final, should replace this with something more meaningful, existingInfo or isParm
       {
@@ -7321,8 +7334,8 @@ void TR_InvariantArgumentPreexistence::processIndirectCall(TR::Node *node, TR::T
       //
       // liqun: we need to change this assertion if we were to fix IAP completely
       // liqun: ? what does the assert mean?
-      TR_ASSERT(fixedOrFinalInfoExists || !existingInfo->assumptionHasBeenAdded(),
-         "Symbol %p is fixed ref type - but is not marked to be currently final (fixedOrFinalInfoExists=%d, fixedType=%p)", receiverSymbol, fixedOrFinalInfoExists, receiverSymbol->getParmSymbol()->getFixedType());
+      //TR_ASSERT(fixedOrFinalInfoExists || !existingInfo->assumptionHasBeenAdded(),
+      //   "Symbol %p is fixed ref type - but is not marked to be currently final (fixedOrFinalInfoExists=%d, fixedType=%p)", receiverSymbol, fixedOrFinalInfoExists, receiverSymbol->getParmSymbol()->getFixedType());
 
       // liqun: has to be a concreate virtual method
       if (!isInterface && !resolvedMethod->virtualMethodIsOverridden() && !resolvedMethod->isAbstract())
@@ -7350,18 +7363,19 @@ void TR_InvariantArgumentPreexistence::processIndirectCall(TR::Node *node, TR::T
             node->devirtualizeCall(treeTop);
             bool inc = comp()->getCHTable()->recompileOnMethodOverride(comp(), resolvedMethod);
             if (callInfo && inc) callInfo->incNumPrexAssumptions();
-            _success = true;
             }
          }
-      else if (receiverInfo.getClass())
+      else if (receiverInfo->getClass())
          {
 #ifdef J9_PROJECT_SPECIFIC
          TR::ClassTableCriticalSection processIndirectCall(comp()->fe());
          TR::SymbolReference *symRef = node->getSymbolReference();
          TR_PersistentCHTable * chTable = comp()->getPersistentInfo()->getPersistentCHTable();
          TR::MethodSymbol *methSymbol = node->getSymbol()->getMethodSymbol();
-         if (methSymbol->isInterface() || methodSymbol)
+         // methSymbol is the same as methodSymbol
+         if (methSymbol->isInterface() || methodSymbol) // liqun: ? why methodSymbol? it is always non-null
             {
+            traceIfEnabled("is interface\n");
             TR_ResolvedMethod * method = NULL;
             bool newMethod = true;
             // There is the risk of invaliding a method repeatedly due to class hierarchy extensions
@@ -7369,47 +7383,37 @@ void TR_InvariantArgumentPreexistence::processIndirectCall(TR::Node *node, TR::T
             // been invalidated once
             //
             TR::Recompilation *recompInfo = comp()->getRecompilationInfo();
-            if (recompInfo && recompInfo->getMethodInfo()->getNumberOfInvalidations() >= 1 && !chTable->findSingleConcreteSubClass(receiverInfo.getClass(), comp()))
+            if (recompInfo && recompInfo->getMethodInfo()->getNumberOfInvalidations() >= 1 && !chTable->findSingleConcreteSubClass(receiverInfo->getClass(), comp()))
                {
+               traceIfEnabled("exit\n");
                // will exit without performing any transformation
                //fprintf(stderr, "will not perform devirt\n");
                }
             else if (methSymbol->isInterface())
                {
                if (comp()->getPersistentInfo()->getRuntimeAssumptionTable()->getAssumptionCount(RuntimeAssumptionOnClassExtend) < 100000)
-                  method = chTable->findSingleInterfaceImplementer(receiverInfo.getClass(), node->getSymbolReference()->getCPIndex(), node->getSymbolReference()->getOwningMethod(comp()), comp());
+                  {
+                  method = chTable->findSingleInterfaceImplementer(receiverInfo->getClass(), node->getSymbolReference()->getCPIndex(), node->getSymbolReference()->getOwningMethod(comp()), comp());
+               traceIfEnabled("interface method %p receiver class %p\n", method, receiverInfo->getClass());
+                  }
                //if (method)
                //   fprintf(stderr, "%s assumptios=%d\n", comp()->signature(), comp()->getPersistentInfo()->getRuntimeAssumptionTable()->getAssumptionCount(RuntimeAssumptionOnClassExtend));
                }
             else
                {
-               TR_OpaqueClassBlock *clazz = resolvedMethod->containingClass();
-               if (clazz)
+               if (resolvedMethod->isAbstract())
+                  method = chTable->findSingleAbstractImplementer(receiverInfo->getClass(), symRef->getOffset(), node->getSymbolReference()->getOwningMethod(comp()), comp());
+               else if (!chTable->isOverriddenInThisHierarchy(resolvedMethod, receiverInfo->getClass(), symRef->getOffset(), comp()))
                   {
-                  TR_OpaqueClassBlock *thisClazz = receiverInfo.getClass();
-                  if (thisClazz)
-                        {
-                     TR_YesNoMaybe isInstance = fe()->isInstanceOf(thisClazz, clazz, true);
-                     if (isInstance == TR_yes)
-                        devirtualize = true;
-                     }
-                  }
-
-               if (devirtualize)
-                  {
-                  if (resolvedMethod->isAbstract())
-                     method = chTable->findSingleAbstractImplementer(receiverInfo.getClass(), symRef->getOffset(), node->getSymbolReference()->getOwningMethod(comp()), comp());
-                  else if (!chTable->isOverriddenInThisHierarchy(resolvedMethod, receiverInfo.getClass(), symRef->getOffset(), comp()))
-                     {
-                     method = symRef->getOwningMethod(comp())->getResolvedVirtualMethod(comp(), receiverInfo.getClass(), symRef->getOffset());
-                     newMethod = false;
-                     }
+                  method = symRef->getOwningMethod(comp())->getResolvedVirtualMethod(comp(), receiverInfo->getClass(), symRef->getOffset());
+                  newMethod = false;
                   }
                }
 
             if (method && !method->virtualMethodIsOverridden())
                {
-               TR_PersistentClassInfo *classInfo = comp()->getPersistentInfo()->getPersistentCHTable()->findClassInfoAfterLocking(receiverInfo.getClass(), comp());
+               traceIfEnabled("method\n");
+               TR_PersistentClassInfo *classInfo = comp()->getPersistentInfo()->getPersistentCHTable()->findClassInfoAfterLocking(receiverInfo->getClass(), comp());
 
                // if the number of recompile assumptions on this particular
                // class has exceeded a threshold, don't do prex anymore for this class
@@ -7467,7 +7471,7 @@ void TR_InvariantArgumentPreexistence::processIndirectCall(TR::Node *node, TR::T
                   else if (treeTop->getNode()->getOpCodeValue() == TR::ResolveAndNULLCHK)
                      TR::Node::recreate(treeTop->getNode(), TR::NULLCHK);
 
-                  bool doInc = comp()->getCHTable()->recompileOnNewClassExtend(comp(), receiverInfo.getClass());
+                  bool doInc = comp()->getCHTable()->recompileOnNewClassExtend(comp(), receiverInfo->getClass());
 
                   if (classInfo)
                      {
@@ -7504,7 +7508,9 @@ void TR_InvariantArgumentPreexistence::processIndirectCall(TR::Node *node, TR::T
       }
 
 
-   if (comp()->isPeekingMethod() && receiverInfo.getClass() && !isInterface)
+   // why doing special thing for peeking?
+   // receiverInfo means the receiver is not from parm, it has a known object info?
+   if (comp()->isPeekingMethod() && receiverInfo->getClass() && !isInterface)
       {
       TR::SymbolReference *symRef = node->getSymbolReference();
       int32_t offset = symRef->getOffset();
@@ -7520,20 +7526,20 @@ void TR_InvariantArgumentPreexistence::processIndirectCall(TR::Node *node, TR::T
       // refine the method.
       // the problem is, we may have devirtualized the method above
       bool canRefine = true;
-      if (originalClazz != receiverInfo.getClass())
+      if (originalClazz != receiverInfo->getClass())
          {
-         TR_YesNoMaybe isInstance = fe()->isInstanceOf(originalClazz, receiverInfo.getClass(), true);
+         TR_YesNoMaybe isInstance = fe()->isInstanceOf(originalClazz, receiverInfo->getClass(), true);
          if (isInstance == TR_yes)
             canRefine = false;
 
-         isInstance = fe()->isInstanceOf(receiverInfo.getClass(), originalClazz, true);
+         isInstance = fe()->isInstanceOf(receiverInfo->getClass(), originalClazz, true);
          if (isInstance == TR_no)
             canRefine = false;
          }
 
       TR_ResolvedMethod *resolvedMethod = NULL;
       if (canRefine)
-         resolvedMethod = symRef->getOwningMethod(comp())->getResolvedVirtualMethod(comp(), receiverInfo.getClass(), offset);
+         resolvedMethod = symRef->getOwningMethod(comp())->getResolvedVirtualMethod(comp(), receiverInfo->getClass(), offset);
 
       if (resolvedMethod)
          {
