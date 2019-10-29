@@ -4626,9 +4626,11 @@ void TR_InlinerBase::inlineFromGraph(TR_CallStack *prevCallStack, TR_CallTarget 
                   getUtil()->computePrexInfo(target);
 
                   // liqun: the following function is j9 specific
-                  TR_PrexArgInfo* argsFromSymbol = TR_PrexArgInfo::buildPrexArgInfoForMethodSymbol(target->_calleeSymbol, tracer());
+                  //TR_PrexArgInfo* argsFromSymbol = TR_PrexArgInfo::buildPrexArgInfoForMethodSymbol(target->_calleeSymbol, tracer());
                   // Validate the arg info at callsite and arg info from call target
                   // If validation fails, we're inlining dead call
+                 targetsToInline.add(target);
+/*
                  if (TR_PrexArgInfo::validateAndPropagateArgsFromCalleeSymbol(argsFromSymbol, target->_prexArgInfo, tracer()))
                     {
                     targetsToInline.add(target);
@@ -4641,6 +4643,7 @@ void TR_InlinerBase::inlineFromGraph(TR_CallStack *prevCallStack, TR_CallTarget 
                        calleeSymbol->getMethod()->signature(trMemory(), stackAlloc));
                     tracer()->insertCounter(Dead_Call, tt);
                     }
+*/
                   }
                }
             }
