@@ -118,7 +118,7 @@ class TR_PrexArgInfo
 
    static TR_PrexArgInfo* buildPrexArgInfoForMethodSymbol(TR::ResolvedMethodSymbol* methodSymbol, TR_InlinerTracer* tracer);
    void clearArgInfoForNonInvariantArguments(TR::ResolvedMethodSymbol* methodSymbol, TR_InlinerTracer* tracer);
-   static TR_PrexArgInfo* argInfoFromCaller(TR::Node* callNode, TR_PrexArgInfo* argInfo, TR_PrexArgInfo* callerArgInfo, TR_InlinerTracer* tracer);
+   static TR_PrexArgInfo* argInfoFromCaller(TR::Node* callNode, TR_PrexArgInfo* argInfo, TR_PrexArgInfo* callerArgInfo);
 #endif
 
    TR_ALLOC(TR_Memory::LocalOpts);
