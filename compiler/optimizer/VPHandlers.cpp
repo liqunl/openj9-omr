@@ -9128,6 +9128,27 @@ static TR::Node *constrainIfcmpeqne(OMR::ValuePropagation *vp, TR::Node *node, b
 
 #ifdef J9_PROJECT_SPECIFIC
 
+   traceMsg(vp->comp(), "liqun: before if\n");
+   traceMsg(vp->comp(), "liqun: lastTimeThrough %d performVirtualGuardNOPing %d isCold %d isExtension %d\n",
+            vp->lastTimeThrough(), vp->comp()->performVirtualGuardNOPing(),
+            vp->_curBlock->isCold(), vp->_curBlock->getNextBlock()->isExtensionOfPreviousBlock());
+
+   traceMsg(vp->comp(), "liqun: getNumChildren %d node n%dn\n", node->getNumChildren(), node->getGlobalIndex());
+
+   TR::Compilation* comp = vp->comp();
+
+   traceMsg(comp, "getRecompilationInfo %p getSupportsVirtualGuardNOPing %d TR_DisableVirtualGuardNOPing %d TR_DisableCHOpts %d\n",
+            comp->getRecompilationInfo(), comp->cg()->getSupportsVirtualGuardNOPing(),
+            comp->getOption(TR_DisableVirtualGuardNOPing),
+            comp->getOption(TR_DisableCHOpts));
+
+/*
+   if (!comp->getRecompilationInfo() ||
+       !comp->cg()->getSupportsVirtualGuardNOPing() ||
+       comp->getOption(TR_DisableVirtualGuardNOPing) ||
+       comp->getOption(TR_DisableCHOpts)
+      )
+*/
    if (!vp->comp()->compileRelocatableCode() &&
        vp->lastTimeThrough() &&
        vp->comp()->performVirtualGuardNOPing() &&
@@ -9137,6 +9158,7 @@ static TR::Node *constrainIfcmpeqne(OMR::ValuePropagation *vp, TR::Node *node, b
        ((node->getOpCodeValue() == TR::ifacmpeq) ||
         (node->getOpCodeValue() == TR::ifacmpne)))
       {
+      traceMsg(vp->comp(), "liqun: in ifacmp\n");
       TR::Node *first = node->getFirstChild();
       TR::Node *second = node->getSecondChild();
       if ((second->getOpCodeValue() == TR::aconst) &&
@@ -9146,13 +9168,16 @@ static TR::Node *constrainIfcmpeqne(OMR::ValuePropagation *vp, TR::Node *node, b
          int32_t clazzNameLen = -1;
          bool isGlobal;
          TR::VPConstraint *objectRefConstraint = vp->getConstraint(first, isGlobal);
+         traceMsg(vp->comp(), "liqun: objectRefConstraint %p\n", objectRefConstraint);
          if (objectRefConstraint)
             {
             TR::VPClassType *typeConstraint = objectRefConstraint->getClassType();
+            traceMsg(vp->comp(), "liqun: typeConstraint %p\n", typeConstraint);
             if (typeConstraint)
                {
                TR::VPConstraint *resolvedTypeConstraint = typeConstraint->asResolvedClass();
                bool allowForAOT = vp->comp()->getOption(TR_UseSymbolValidationManager);
+               traceMsg(vp->comp(), "liqun: resolvedTypeConstraint %p\n", resolvedTypeConstraint);
                if (resolvedTypeConstraint)
                   {
                   TR_OpaqueClassBlock *clazz = resolvedTypeConstraint->getClass();
@@ -9223,6 +9248,7 @@ static TR::Node *constrainIfcmpeqne(OMR::ValuePropagation *vp, TR::Node *node, b
       }
 #endif
 
+   traceMsg(vp->comp(), "liqun: after if\n");
    // Propagate current constraints to the branch target
    //
    if (vp->trace())
@@ -9799,6 +9825,7 @@ static TR::Node *constrainIfcmpeqne(OMR::ValuePropagation *vp, TR::Node *node, b
           //of a call and the type of a receiver (e.g. abstract, interface, normal classes)
           //if findSingleImplementer returns a method than it must be the implementation Inliner used since
           //it would be the only one available
+          traceMsg(vp->comp(), "objectClass %p rhsClass %p callClass %p isFixedClass %d\n", objectClass, rhsClass, callClass, lhs->isFixedClass());
           if (objectClass && rhsClass && callClass && !lhs->isFixedClass() &&
               vp->comp()->fe()->isInstanceOf (rhsClass, objectClass, true, true, true) == TR_yes &&
               vp->comp()->fe()->isInstanceOf (objectClass, callClass, true, true, true) == TR_yes) /*the object class may be less specific than callClass*/
