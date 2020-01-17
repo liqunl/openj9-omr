@@ -106,6 +106,15 @@ class TR_VirtualGuard
          TR::TreeTop *,
          TR_OpaqueClassBlock *);
 
+   static TR::Node *createVftGuardWithReceiver(
+         TR_VirtualGuardKind,
+         TR::Compilation *,
+         int16_t calleeIndex,
+         TR::Node *,
+         TR::TreeTop *,
+         TR_OpaqueClassBlock *,
+         TR::Node* receiverNode);
+
    static TR::Node *createMethodGuard(
          TR_VirtualGuardKind,
          TR::Compilation *,

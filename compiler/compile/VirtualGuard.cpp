@@ -134,9 +134,17 @@ TR_VirtualGuard::createVftGuard
 (TR_VirtualGuardKind kind, TR::Compilation * comp, int16_t calleeIndex,
  TR::Node* callNode, TR::TreeTop * destination, TR_OpaqueClassBlock *thisClass)
    {
+   return createVftGuardWithReceiver(kind, comp, calleeIndex, callNode, destination, thisClass, callNode->getSecondChild());
+   }
+
+TR::Node*
+TR_VirtualGuard::createVftGuardWithReceiver
+(TR_VirtualGuardKind kind, TR::Compilation * comp, int16_t calleeIndex,
+ TR::Node* callNode, TR::TreeTop * destination, TR_OpaqueClassBlock *thisClass, TR::Node* receiverNode)
+   {
    TR::SymbolReferenceTable *symRefTab = comp->getSymRefTab();
 
-   TR::Node* vft = TR::Node::createWithSymRef(TR::aloadi, 1, 1, callNode->getSecondChild(), symRefTab->findOrCreateVftSymbolRef());
+   TR::Node* vft = TR::Node::createWithSymRef(TR::aloadi, 1, 1, receiverNode, symRefTab->findOrCreateVftSymbolRef());
    TR::Node* aconstNode = TR::Node::aconst(callNode, (uintptrj_t)thisClass);
    aconstNode->setIsClassPointerConstant(true);
    aconstNode->setInlinedSiteIndex(calleeIndex);

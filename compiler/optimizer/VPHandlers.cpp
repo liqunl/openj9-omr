@@ -2190,20 +2190,27 @@ TR::Node *constrainIaload(OMR::ValuePropagation *vp, TR::Node *node)
           (node->getSymbolReference() == vp->comp()->getSymRefTab()->findVftSymbolRef()))
          {
          TR_OpaqueClassBlock *clazz = NULL;
+         TR::VPClassType *type = NULL;
          if (base->isClassObject() == TR_yes)
             {
             // base can only be an instance of java/lang/Class, since
             // we can't load <vft> relative to a J9Class.
             clazz = vp->comp()->getClassClassPointer();
+            if (clazz != NULL)
+               type = TR::VPFixedClass::create(vp, clazz);
             }
          else if (base->isFixedClass())
             {
             clazz = base->getClass();
+            if (clazz != NULL)
+               type = TR::VPFixedClass::create(vp, clazz);
             }
-
-         TR::VPClassType *type = NULL;
-         if (clazz != NULL)
-            type = TR::VPFixedClass::create(vp, clazz);
+         else if (base->getClass() &&
+                  base->getClassType() &&
+                  base->getClassType()->asResolvedClass())
+            {
+            type = TR::VPResolvedClass::create(vp, base->getClass());
+            }
 
          TR::VPClassPresence *nonnull = TR::VPNonNullObject::create(vp);
          TR::VPObjectLocation *loc =
@@ -8878,6 +8885,7 @@ static void addDelayedConvertedGuard (TR::Node* node,
                                        TR_VirtualGuard* oldVirtualGuard,
                                        OMR::ValuePropagation* vp,
                                        TR_VirtualGuardKind guardKind,
+                                       TR_VirtualGuardTestType testType,
                                        TR_OpaqueClassBlock* objectClass)
    {
 
@@ -8894,7 +8902,21 @@ static void addDelayedConvertedGuard (TR::Node* node,
 
 
    TR::Node *newReceiver=TR::Node::createLoad(callNode, callNode->getSecondChild()->getSymbolReference());
-   TR::Node* newGuardNode = TR_VirtualGuard::createMethodGuardWithReceiver
+   TR::Node* newGuardNode = NULL;
+   if (testType == TR_VftTest)
+      {
+      newGuardNode = TR_VirtualGuard::createVftGuardWithReceiver
+                       (guardKind,
+                       vp->comp(),
+                       oldVirtualGuard->getCalleeIndex(),
+                       callNode,
+                       node->getBranchDestination(),
+                       objectClass /*oldVirtualGuard->getThisClass()*/,
+                       newReceiver);
+      }
+   else
+      {
+      newGuardNode = TR_VirtualGuard::createMethodGuardWithReceiver
                        (guardKind,
                        vp->comp(),
                        oldVirtualGuard->getCalleeIndex(),
@@ -8902,7 +8924,8 @@ static void addDelayedConvertedGuard (TR::Node* node,
                        node->getBranchDestination(),
                        methodSymbol,
                        objectClass /*oldVirtualGuard->getThisClass()*/,
-             newReceiver);
+                       newReceiver);
+      }
 
    if (vp->trace())
       {
@@ -9162,7 +9185,7 @@ static TR::Node *constrainIfcmpeqne(OMR::ValuePropagation *vp, TR::Node *node, b
       TR::Node *first = node->getFirstChild();
       TR::Node *second = node->getSecondChild();
       if ((second->getOpCodeValue() == TR::aconst) &&
-          (second->getAddress() == 0))
+          (second->getAddress() == 0)) //liqun: what does it mean?
          {
          const char *clazzToBeInitialized = NULL;
          int32_t clazzNameLen = -1;
@@ -9398,6 +9421,7 @@ static TR::Node *constrainIfcmpeqne(OMR::ValuePropagation *vp, TR::Node *node, b
                      TR::Node *classNode = vtableEntryNode->getFirstChild();
                      TR::Node   *methodPtrNode    = node->getSecondChild();
                      TR::VPConstraint *classConstraint = vp->getConstraint(classNode, isGlobal);
+                     // liqun: what if class is not fixed class, but its method equals to the tested one
                      if (ignoreVirtualGuard && classConstraint && classConstraint->isFixedClass())
                         {
                         TR_OpaqueClassBlock *clazz  = classConstraint->getClass();
@@ -9413,7 +9437,14 @@ static TR::Node *constrainIfcmpeqne(OMR::ValuePropagation *vp, TR::Node *node, b
                         else
                            cannotBranch = true;
                         }
+                     else if (classConstraint &&
+                              classConstraint->getClass() &&
+                              classConstraint->getClassType() &&
+                              classConstraint->asResolvedClass())
+                        {
+                        }
 
+                     // liqun: this will never be true, as the vftentry symbol is not vft symbol
                      if (vtableEntryNode->getSymbolReference() == vp->comp()->getSymRefTab()->findVftSymbolRef())
                         {
                         TR_OpaqueClassBlock* classFromMethod = vp->comp()->fe()->getClassFromMethodBlock((TR_OpaqueMethodBlock*)methodPtrNode->getAddress());
@@ -9730,6 +9761,11 @@ static TR::Node *constrainIfcmpeqne(OMR::ValuePropagation *vp, TR::Node *node, b
       TR_ASSERT(!cannotBranch, "Cannot branch or fall through");
       changeConditionalToGoto(vp, node, edge);
       }
+   // liqun: why it has to be an aload? Anything should be good as long as it has a constraint
+   // just check if the vft symbol has any constraint on it
+   // doesn't see any point of this code
+   // the constraint on the object must be more specific than the constraint on the method pointer,
+   // as we must be able to call the method on the object
    else if (constraintFromMethodPointer && lhsChild->getFirstChild()->getFirstChild()->getOpCode().isLoadVarDirect())
       {
       //if constraintFromMethodPointer is set we should be able to assume that lhsChild->getFirstChild()->getFirstChild() is not NULL, since non-NULL constraintFromMethodPointer implies the following trees:
@@ -9871,6 +9907,7 @@ static TR::Node *constrainIfcmpeqne(OMR::ValuePropagation *vp, TR::Node *node, b
         the method test is insufficient for the devirtualizations done by invariantargumentpreexisence
       */
 
+      // liqun: numConcreteClasses(&subClasses) < 2 means objectClass hasn't been extended
       if (searchSucceeded && numConcreteClasses(&subClasses) < 2 && rvm)
                    {
                    TR::ResolvedMethodSymbol* cMethodSymbol = vp->comp()->getSymRefTab()->findOrCreateMethodSymbol(
@@ -9880,7 +9917,8 @@ static TR::Node *constrainIfcmpeqne(OMR::ValuePropagation *vp, TR::Node *node, b
                       methodSymbol->isInterface()  ? TR_InterfaceGuard :
                       TR::Compiler->cls.isAbstractClass(vp->comp(), objectClass) ? TR_AbstractGuard : TR_HierarchyGuard;
 
-                   addDelayedConvertedGuard(node, callNode, cMethodSymbol, vGuard, vp, guardKind, objectClass);
+                   addDelayedConvertedGuard(node, callNode, cMethodSymbol, vGuard, vp, guardKind, TR_VftTest, objectClass);
+                   //addDelayedConvertedGuard(node, callNode, cMethodSymbol, vGuard, vp, guardKind, TR_MethodTest, objectClass);
                    }
                 }
              }
