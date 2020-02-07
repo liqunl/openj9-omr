@@ -1379,6 +1379,17 @@ void TR_CopyPropagation::replaceCopySymbolReferenceByOriginalIn(TR::SymbolRefere
                if (!origNode->getOpCode().isStore())
                   TR::Node::recreate(node, origNode->getOpCodeValue());
 
+               //Preserve flags for loadaddr
+               if (origNode->getOpCodeValue() == TR::loadaddr)
+                  {
+                  node->setPointsToNull(origNode->pointsToNull());
+                  node->setPointsToNonNull(origNode->pointsToNonNull());
+                  // The following flags are used by EA to determine if a local escapes
+                  node->setCannotTrackLocalUses(origNode->cannotTrackLocalUses());
+                  node->setEscapesInColdBlock(origNode->escapesInColdBlock());
+                  node->setCannotTrackLocalStringUses(origNode->cannotTrackLocalStringUses());
+                  }
+
                if (origNode->getOpCode().hasSymbolReference() && node->getOpCode().hasSymbolReference())
                   node->setSymbolReference(origNode->getSymbolReference());
                }
