@@ -159,7 +159,8 @@ const OptimizationStrategy reorderArrayIndexOpts[] =
 
 const OptimizationStrategy cheapObjectAllocationOpts[] =
    {
-   { eachEscapeAnalysisPassGroup, IfEAOpportunitiesAndNotOptServer    },
+   //{ eachEscapeAnalysisPassGroup, IfEAOpportunitiesAndNotOptServer    },
+   { eachEscapeAnalysisPassGroup, IfEAOpportunities},
    { explicitNewInitialization, IfNews      }, // do before local dead store
     // basicBlockHoisting,                     // merge block into pred and prepare for local dead store
    { localDeadStoreElimination              }, // remove local/parm/some field stores
@@ -1533,6 +1534,10 @@ int32_t OMR::Optimizer::performOptimization(const OptimizationStrategy *optimiza
       case IfEAOpportunities:
       case IfEAOpportunitiesAndNotOptServer:
          {
+         if (comp()->getOption(TR_TraceOptDetails) || comp()->getOption(TR_TraceOptTrees) || comp()->getOption(TR_TraceOpts))
+             {
+             traceMsg(comp(), "liqun: ea has opportunities %d\n", comp()->getMethodSymbol()->hasEscapeAnalysisOpportunities());
+             }
          if (comp()->getMethodSymbol()->hasEscapeAnalysisOpportunities())
             {
             if ((optimization->_options == IfEAOpportunitiesAndNotOptServer) && comp()->isOptServer())
