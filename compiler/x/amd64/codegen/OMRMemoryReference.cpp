@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2020 IBM Corp. and others
+ * Copyright (c) 2000, 2019 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -59,99 +59,73 @@ namespace TR { class Machine; }
 
 
 OMR::X86::AMD64::MemoryReference::MemoryReference(TR::CodeGenerator *cg):
-      OMR::X86::MemoryReference(cg),
-   _forceRIPRelative(false)
+   OMR::X86::MemoryReference(cg)
    {
    self()->finishInitialization(cg, NULL);
    }
 
 OMR::X86::AMD64::MemoryReference::MemoryReference(TR::Register *br, TR::SymbolReference *sr, TR::Register *ir, uint8_t s, TR::CodeGenerator *cg):
-      OMR::X86::MemoryReference(br, sr, ir, s, cg),
-   _forceRIPRelative(false)
+   OMR::X86::MemoryReference(br, sr, ir, s, cg)
    {
    self()->finishInitialization(cg, NULL);
    }
 
 OMR::X86::AMD64::MemoryReference::MemoryReference(TR::Register *br, TR::Register *ir, uint8_t s, TR::CodeGenerator *cg):
-      OMR::X86::MemoryReference(br, ir, s, cg),
-   _forceRIPRelative(false)
+   OMR::X86::MemoryReference(br, ir, s, cg)
    {
    self()->finishInitialization(cg, NULL);
    }
 
 OMR::X86::AMD64::MemoryReference::MemoryReference(TR::Register *br, intptrj_t disp, TR::CodeGenerator *cg):
-      OMR::X86::MemoryReference(br, disp, cg),
-   _forceRIPRelative(false)
+   OMR::X86::MemoryReference(br, disp, cg)
    {
    self()->finishInitialization(cg, NULL);
    }
 
 OMR::X86::AMD64::MemoryReference::MemoryReference(intptrj_t disp, TR::CodeGenerator *cg, TR_ScratchRegisterManager *srm):
-      OMR::X86::MemoryReference(disp, cg),
-   _forceRIPRelative(false)
+   OMR::X86::MemoryReference(disp, cg)
    {
    self()->finishInitialization(cg, srm);
    }
 
 OMR::X86::AMD64::MemoryReference::MemoryReference(TR::Register *br, TR::Register *ir, uint8_t s, intptrj_t disp, TR::CodeGenerator *cg):
-      OMR::X86::MemoryReference(br, ir, s, disp, cg),
-   _forceRIPRelative(false)
+   OMR::X86::MemoryReference(br, ir, s, disp, cg)
    {
    self()->finishInitialization(cg, NULL);
    }
 
 OMR::X86::AMD64::MemoryReference::MemoryReference(TR::X86DataSnippet *cds, TR::CodeGenerator *cg):
-      OMR::X86::MemoryReference(cds, cg),
-   _forceRIPRelative(false)
+   OMR::X86::MemoryReference(cds, cg)
    {
    self()->finishInitialization(cg, NULL);
    }
 
 OMR::X86::AMD64::MemoryReference::MemoryReference(TR::LabelSymbol *label, TR::CodeGenerator *cg):
-      OMR::X86::MemoryReference(label, cg),
-   _forceRIPRelative(false)
+   OMR::X86::MemoryReference(label, cg)
    {
    self()->finishInitialization(cg, NULL);
    }
 
 OMR::X86::AMD64::MemoryReference::MemoryReference(TR::Node *rootLoadOrStore, TR::CodeGenerator *cg, bool canRematerializeAddressAdds, TR_ScratchRegisterManager *srm):
-      OMR::X86::MemoryReference(rootLoadOrStore, cg, canRematerializeAddressAdds),
-   _forceRIPRelative(false)
+   OMR::X86::MemoryReference(rootLoadOrStore, cg, canRematerializeAddressAdds)
    {
    self()->finishInitialization(cg, srm);
    }
 
 OMR::X86::AMD64::MemoryReference::MemoryReference(TR::SymbolReference *symRef, TR::CodeGenerator *cg, TR_ScratchRegisterManager *srm):
-      OMR::X86::MemoryReference(symRef, cg),
-   _forceRIPRelative(false)
-   {
-   self()->finishInitialization(cg, srm);
-   }
-
-OMR::X86::AMD64::MemoryReference::MemoryReference(TR::SymbolReference *symRef, TR::CodeGenerator *cg, bool forceRIPRelative, TR_ScratchRegisterManager *srm):
-      OMR::X86::MemoryReference(symRef, cg),
-   _forceRIPRelative(forceRIPRelative)
+   OMR::X86::MemoryReference(symRef, cg)
    {
    self()->finishInitialization(cg, srm);
    }
 
 OMR::X86::AMD64::MemoryReference::MemoryReference(TR::SymbolReference *symRef, intptrj_t displacement, TR::CodeGenerator *cg, TR_ScratchRegisterManager *srm):
-      OMR::X86::MemoryReference(symRef, displacement, cg),
-   _forceRIPRelative(false)
-   {
-   self()->finishInitialization(cg, srm);
-   }
-
-OMR::X86::AMD64::MemoryReference::MemoryReference(TR::SymbolReference *symRef, intptrj_t displacement, TR::CodeGenerator *cg, bool forceRIPRelative, TR_ScratchRegisterManager *srm):
-      OMR::X86::MemoryReference(symRef, displacement, cg),
-   _forceRIPRelative(forceRIPRelative)
+   OMR::X86::MemoryReference(symRef, displacement, cg)
    {
    self()->finishInitialization(cg, srm);
    }
 
 OMR::X86::AMD64::MemoryReference::MemoryReference(TR::MemoryReference& mr, intptrj_t n, TR::CodeGenerator *cg, TR_ScratchRegisterManager *srm):
-      OMR::X86::MemoryReference(mr, n, cg),
-   _forceRIPRelative(mr.getForceRIPRelative())
+   OMR::X86::MemoryReference(mr, n, cg)
    {
    self()->finishInitialization(cg, srm);
    }
@@ -160,6 +134,7 @@ void OMR::X86::AMD64::MemoryReference::finishInitialization(
       TR::CodeGenerator *cg,
       TR_ScratchRegisterManager *srm)
    {
+   _preferRIPRelative = false;
    TR::Machine *machine = cg->machine();
    TR::SymbolReference &sr = self()->getSymbolReference();
    TR::Compilation *comp = cg->comp();
@@ -167,14 +142,7 @@ void OMR::X86::AMD64::MemoryReference::finishInitialization(
    // Figure out whether we need to allocate a register for the address
    //
    bool mightNeedAddressRegister;
-   if (_forceRIPRelative)
-      {
-      // Assume the consumer knows the target is within RIP range.
-      // Binary encoding will fatally assert otherwise.
-      //
-      mightNeedAddressRegister = false;
-      }
-   else if (self()->getDataSnippet())
+   if (self()->getDataSnippet())
       {
       // Assume snippets are in RIP range
       //
@@ -243,9 +211,7 @@ void OMR::X86::AMD64::MemoryReference::finishInitialization(
          }
       }
    else
-      {
       _addressRegister = NULL;
-      }
 
    }
 
@@ -270,16 +236,12 @@ void OMR::X86::AMD64::MemoryReference::useRegisters(TR::Instruction  *instr, TR:
       }
    }
 
-bool OMR::X86::AMD64::MemoryReference::needsAddressLoadInstruction(intptrj_t nextInstructionAddress, TR::CodeGenerator * cg)
+bool OMR::X86::AMD64::MemoryReference::needsAddressLoadInstruction(intptrj_t rip, TR::CodeGenerator * cg)
    {
-   TR::SymbolReference &sr = self()->getSymbolReference();
-   intptrj_t displacement = self()->getDisplacement();
-
-   if (_forceRIPRelative)
-      {
-      return false;
-      }
-   else if (sr.getSymbol() != NULL && sr.isUnresolved())
+   TR::SymbolReference &sr           = self()->getSymbolReference();
+   intptrj_t           displacement = self()->getDisplacement();
+   TR::Compilation *comp = cg->comp();
+   if (sr.getSymbol() != NULL && sr.isUnresolved())
       {
       return sr.getSymbol()->isShadow() ? false : true;
       }
@@ -291,11 +253,11 @@ bool OMR::X86::AMD64::MemoryReference::needsAddressLoadInstruction(intptrj_t nex
       return true;
    else if (sr.getSymbol() && sr.getSymbol()->isCountForRecompile() && cg->needRelocationsForPersistentInfoData())
       return true;
-   else if (cg->comp()->getOption(TR_EnableHCR) && sr.getSymbol() && sr.getSymbol()->isClassObject())
+   else if (comp->getOption(TR_EnableHCR) && sr.getSymbol() && sr.getSymbol()->isClassObject())
       return true; // If a class gets replaced, it may no longer fit in an immediate
    else if (IS_32BIT_SIGNED(displacement))
       return false;
-   else if (IS_32BIT_RIP(displacement, nextInstructionAddress))
+   else if (IS_32BIT_RIP(displacement, rip))
       return false;
    else
       return true;
@@ -529,7 +491,7 @@ OMR::X86::AMD64::MemoryReference::addMetaDataForCodeAddressDisplacementOnly(
       TR::CodeGenerator *cg)
    {
 
-   if (IS_32BIT_SIGNED(displacement) && !_forceRIPRelative)
+   if (IS_32BIT_SIGNED(displacement) && !_preferRIPRelative)
       {
       if (_symbolReference.getSymbol() && _symbolReference.getSymbol()->isClassObject()
          && cg->wantToPatchClassPointer(NULL, cursor)) // may not point to beginning of class
@@ -564,25 +526,11 @@ OMR::X86::AMD64::MemoryReference::generateBinaryEncoding(
 
    TR_ASSERT(containingInstruction != NULL, "AMD64: must have containing instruction to insert address load");
 
-   // Enforcing RIP-relative addressing can only happen for specific forms of the memory reference,
-   // namely where neither a base nor index register have been provided and a SIB byte is not present.
-   // Check and assert if this is an invalid form for RIP-relative addressing.
-   //
-   if (_forceRIPRelative)
-      {
-      TR_ASSERT_FATAL(!self()->getBaseRegister() && !self()->getIndexRegister() && !self()->isForceSIBByte(),
-                      "malformed memory reference for RIP-relative addressing");
-      }
-
-   // If a RIP relative addressing mode might be used, compute the address of the next
-   // instruction based on where the modRM byte is
-   //
+   // Compute what RIP will be, based on where our modRM byte is, in case we need it.
    // [RIP+xxx] has 4-byte offset, no SIB, may have an immediate.
    // See x86-64 Architecture Programmer's Manual, Volume 3, sections 1.1 and 1.7.1.
    //
-   // address of next instruction = modRM + 4 (disp32) + sizeof(immediate for this instruction: 0, 1, or 4) + 1
-   //
-   intptrj_t nextInstructionAddress = (intptrj_t)(modRM + 5) + containingInstruction->getOpCode().info().ImmediateSize();
+   intptrj_t rip = (intptrj_t)(modRM + 5) + containingInstruction->getOpCode().info().ImmediateSize();
 
    if (self()->getDataSnippet() || self()->getLabel())
       {
@@ -590,7 +538,7 @@ OMR::X86::AMD64::MemoryReference::generateBinaryEncoding(
       //
       return OMR::X86::MemoryReference::generateBinaryEncoding(modRM, containingInstruction, cg);
       }
-   else if (self()->needsAddressLoadInstruction(nextInstructionAddress, cg))
+   else if (self()->needsAddressLoadInstruction(rip, cg))
       {
       TR_ASSERT(_addressRegister != NULL, "OMR::X86::AMD64::MemoryReference should have allocated an address register");
 
@@ -702,9 +650,9 @@ OMR::X86::AMD64::MemoryReference::generateBinaryEncoding(
    else if (_baseRegister == NULL && _indexRegister == NULL)
       {
       uint8_t *cursor = modRM+1;
-      if (IS_32BIT_SIGNED(displacement) && !_forceRIPRelative)
+      if (IS_32BIT_SIGNED(displacement) && !_preferRIPRelative)
          {
-         // Addresses in the low 2GB (or high 2GB) can be accessed absolutely using a SIB byte
+         // Addresses in the low 2GB (or high 2GB) can be accessed using a SIB byte
          //
          self()->ModRM(modRM)->setBase()->setHasSIB();
          self()->SIB(cursor++)->setScale()->setNoIndex()->setIndexDisp32();
@@ -712,13 +660,11 @@ OMR::X86::AMD64::MemoryReference::generateBinaryEncoding(
          }
       else
          {
-         // Use RIP-relative addressing
-         //
-         TR_ASSERT_FATAL(IS_32BIT_RIP(displacement, nextInstructionAddress), "destination displacement out of RIP-relative range");
+         TR_ASSERT(IS_32BIT_RIP(displacement, rip), "assertion failure");
          TR_ASSERT(!(comp->getOption(TR_EnableHCR) && sr.getSymbol() && sr.getSymbol()->isClassObject()),
             "HCR runtime assumptions currently can't patch RIP-relative offsets");
          self()->ModRM(modRM)->setIndexOnlyDisp32();
-         *(uint32_t*)cursor = (uint32_t)(displacement - (intptrj_t)nextInstructionAddress);
+         *(uint32_t*)cursor = (uint32_t)(displacement - (intptrj_t)rip);
          }
 
       self()->addMetaDataForCodeAddressDisplacementOnly(displacement, cursor, cg);
