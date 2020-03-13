@@ -8879,6 +8879,56 @@ static int numConcreteClasses (List<TR_PersistentClassInfo>* subClasses)
 #endif
 
 
+static void removeProfiledGuardWithMergedGuard(TR::Node* node,
+                                       TR::Node* callNode,
+                                       TR_VirtualGuard* oldVirtualGuard,
+                                       OMR::ValuePropagation* vp,
+                                       TR_VirtualGuardKind guardKind,
+                                       TR_OpaqueClassBlock* objectClass)
+   {
+   if (!callNode->getFirstChild()->getOpCode().hasSymbolReference() ||
+       callNode->getFirstChild()->getSymbolReference() != vp->comp()->getSymRefTab()->findVftSymbolRef() ||
+       !callNode->getFirstChild()->getFirstChild()->getOpCode().isLoadVarDirect() || //I guess, having a vft symbol implies that there is something underneath it?
+       !callNode->getSecondChild()->getOpCode().isLoadVarDirect() || //it also implies, there should be a receiver argument?
+       !callNode->getSecondChild()->getOpCode().hasSymbolReference() || //I think its safer to exclude statics
+       !callNode->getSecondChild()->getSymbolReference()->getSymbol()->isAutoOrParm()
+       )
+      {
+      return;
+      }
+
+   TR::Node* newGuardNode = NULL;
+   if (guardKind == TR_HCRGuard)
+      {
+      newGuardNode = TR_VirtualGuard::createHCRGuard
+                       (vp->comp(),
+                       oldVirtualGuard->getCalleeIndex(),
+                       callNode,
+                       node->getBranchDestination(),
+                       NULL,
+                       objectClass /*oldVirtualGuard->getThisClass()*/);
+      }
+   else if (guardKind == TR_OSRGuard)
+      {
+      newGuardNode = TR_VirtualGuard::createOSRGuard
+                       (vp->comp(),
+                       node->getBranchDestination());
+      }
+
+   if (vp->trace())
+      {
+      traceMsg(vp->comp(), "P2O: oldGuard %p newGuard %p currentTree %p\n", oldVirtualGuard, newGuardNode, vp->_curTree);
+      }
+
+   TR_VirtualGuard* newGuard = vp->comp()->findVirtualGuardInfo(newGuardNode);
+   //do not add a new guard yet ... it will be added in doDelayedTransformation and we will fix the IL accordingly
+   vp->comp()->removeVirtualGuard(newGuard);
+   //finish the rest of a transformation in doDelayedTransformation
+   vp->_convertedGuards.add(new (vp->trStackMemory()) OMR::ValuePropagation::VirtualGuardInfo(vp, oldVirtualGuard, newGuard, newGuardNode, callNode));
+
+   }
+
+
 static void addDelayedConvertedGuard (TR::Node* node,
                                        TR::Node* callNode,
                                        TR::ResolvedMethodSymbol* methodSymbol,
@@ -9780,8 +9830,22 @@ static TR::Node *constrainIfcmpeqne(OMR::ValuePropagation *vp, TR::Node *node, b
        static const char* disableProfiled2Overridden = feGetEnv ("TR_DisableProfiled2Overridden");
        if (!disableProfiled2Overridden && callNode && vp->lastTimeThrough())
           {
+          if (objectClass && objectClass == rhsClass &&
+              lhs->getClassType()->asFixedClass() &&
+              !vGuard->canBeRemoved() &&
+              vGuard->canBeRemoved(true /*ignoreMerged*/))
+             {
+             // Convert profiled guard with merged guard to the guard it merged with
+             TR_VirtualGuardKind guardKind;
+             if (vGuard->mergedWithHCRGuard())
+                guardKind = TR_HCRGuard;
+             else if (vGuard->mergedWithOSRGuard())
+                guardKind = TR_OSRGuard;
 
-
+             removeProfiledGuardWithMergedGuard(node, callNode, vGuard, vp, guardKind,objectClass);
+             }
+         else
+            {
           TR_OpaqueClassBlock* callClass = NULL;
           TR::MethodSymbol* interfaceMethodSymbol = NULL;
 
@@ -9881,6 +9945,7 @@ static TR::Node *constrainIfcmpeqne(OMR::ValuePropagation *vp, TR::Node *node, b
                 }
              }
           }
+        }
 #endif
        }
 
