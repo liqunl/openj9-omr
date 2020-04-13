@@ -2020,8 +2020,9 @@ TR_InlinerBase::addGuardForVirtual(
    TR::ResolvedMethodSymbol *callingMethod = callNode->getByteCodeInfo().getCallerIndex() == -1 ?
       comp()->getMethodSymbol() : comp()->getInlinedResolvedMethodSymbol(callNode->getByteCodeInfo().getCallerIndex());
 
+   // liqun: use callNode here
    if ((comp()->getHCRMode() != TR::osr || guard->_kind != TR_HCRGuard)
-       && callingMethod->supportsInduceOSR(callNode->getByteCodeInfo(), block1, comp(), false))
+       && callingMethod->supportsInduceOSR(callNode, block1, comp(), false))
       {
       bool shouldUseOSR = heuristicForUsingOSR(callNode, calleeSymbol, callerSymbol, createdHCRAndVirtualGuard);
 
@@ -4690,6 +4691,13 @@ bool TR_InlinerBase::inlineCallTarget2(TR_CallStack * callStack, TR_CallTarget *
    TR::Node * parent = calltarget->_myCallSite->_parent;
    TR::Node * callNode = calltarget->_myCallSite->_callNode;
    TR_VirtualGuardSelection *guard = calltarget->_guard;
+
+   // liqun:
+   if (comp()->cannotOSRAt(callNode))
+      {
+      dumpOptDetails(comp(), "Set can not OSR during %d due to call node %p n%dn\n", comp()->getCurrentInlinedSiteIndex(), callNode, callNode->getGlobalIndex());
+      comp()->setCannotAttemptOSRDuring(comp()->getCurrentInlinedSiteIndex(), true);
+      }
 
    calltarget->_myCallSite->_visitCount++;
 

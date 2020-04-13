@@ -1421,6 +1421,18 @@ OMR::ResolvedMethodSymbol::resetLiveLocalIndices()
    }
 
 bool
+OMR::ResolvedMethodSymbol::supportsInduceOSR(TR::Node* node,
+                                           TR::Block *blockToOSRAt,
+                                           TR::Compilation *comp,
+                                           bool runCleanup)
+   {
+   if (comp->cannotOSRAt(node))
+      return false;
+
+   return supportsInduceOSR(node->getByteCodeInfo(), blockToOSRAt, comp, runCleanup);
+   }
+
+bool
 OMR::ResolvedMethodSymbol::supportsInduceOSR(TR_ByteCodeInfo &bci,
                                            TR::Block *blockToOSRAt,
                                            TR::Compilation *comp,
@@ -1525,19 +1537,6 @@ OMR::ResolvedMethodSymbol::cannotAttemptOSRDuring(int32_t callSite, TR::Compilat
             cannotAttemptOSR = true;
             break;
             }
-
-         // In voluntaryOSR mode, check the caller existed during ILGen because
-         // there is no OSR support for call nodes created outside of ILGen.
-         //
-         // In involuntaryOSR node, yield points are always OSR points and there should be OSR
-         // support for very yield point under this mode.
-         if (callSiteInfo._byteCodeInfo.doNotProfile() && comp->getOSRMode() == TR::voluntaryOSR)
-            {
-            if (comp->getOption(TR_TraceOSR))
-               traceMsg(comp, "Cannot attempt OSR during caller bytecode index %d:%d as it did not exist at ilgen\n", callSite, byteCodeIndex);
-            cannotAttemptOSR = true;
-            break;
-            }
          }
       else
          break;
@@ -1576,15 +1575,6 @@ OMR::ResolvedMethodSymbol::cannotAttemptOSRAt(TR_ByteCodeInfo &bci,
       {
       if (comp->getOption(TR_TraceOSR))
          traceMsg(comp, "Cannot attempt OSR at bytecode index %d:%d\n",
-            callSite, byteCodeIndex);
-      return true;
-      }
-
-   // Check the BCI existed at ilgen
-   if (bci.doNotProfile())
-      {
-      if (comp->getOption(TR_TraceOSR))
-         traceMsg(comp, "Cannot attempt OSR at bytecode index %d:%d as it did not exist at ilgen\n",
             callSite, byteCodeIndex);
       return true;
       }

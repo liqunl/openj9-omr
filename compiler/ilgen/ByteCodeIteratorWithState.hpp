@@ -57,6 +57,7 @@ template<typename ByteCode,
         _tryCatchInfo(comp->allocator("IlGen"))
       {
       _printByteCodes = (comp->getOutFile() != NULL && comp->getOption(TR_TraceBC) && (comp->isOutermostMethod() || comp->getOption(TR_DebugInliner) || comp->trace(OMR::inlining)));
+      // liqun: should we move it to comp?
       _cannotAttemptOSR = comp->getOption(TR_EnableOSR) && !comp->isPeekingMethod() && methodSym->cannotAttemptOSRDuring(comp->getCurrentInlinedSiteIndex(), comp);
       }
 

@@ -199,8 +199,6 @@ OMR::Node::Node(TR::Node *originatingByteCodeNode, TR::ILOpCodes op, uint16_t nu
       // estimate code size to be able to propagate frequencies
       //else
       //   TR_ASSERT(0, "no byte code info");
-
-      _byteCodeInfo.setDoNotProfile(1);
       }
       if(comp->getDebug())
         comp->getDebug()->newNode(self());
@@ -268,16 +266,6 @@ OMR::Node::Node(TR::Node * from, uint16_t numChildren)
    if(comp->getDebug())
       comp->getDebug()->newNode(self());
 
-   TR_IlGenerator * ilGen = comp->getCurrentIlGenerator();
-   if (ilGen)
-      {
-      _byteCodeInfo.setDoNotProfile(0);
-      }
-   else
-      {
-      _byteCodeInfo.setDoNotProfile(1);
-      }
-
    if (from->getOpCode().isBranch() || from->getOpCode().isSwitch())
       _byteCodeInfo.setDoNotProfile(1);
 
@@ -297,6 +285,11 @@ OMR::Node::Node(TR::Node * from, uint16_t numChildren)
    if (from->hasDataType())
       {
       self()->setDataType(from->getDataType());
+      }
+
+   if (!comp->getCurrentIlGenerator() && comp->isPotentialOSRPoint(self()))
+      {
+      comp->setCannotOSRAt(self());
       }
    }
 
@@ -538,19 +531,26 @@ OMR::Node::recreateAndCopyValidPropertiesImpl(TR::Node *originalNode, TR::ILOpCo
    {
    TR_ASSERT_FATAL(TR::Node::isNotDeprecatedUnsigned(op), "Trying to use a deprecated unsigned opcode: #%d \n", op);
    TR_ASSERT(originalNode != NULL, "trying to recreate node from a NULL originalNode.");
+
+   TR::Compilation * comp = TR::comp();
+   bool originalNodeIsPotentialOSRPoint = comp->isPotentialOSRPoint(originalNode);
    if (originalNode->getOpCodeValue() == op)
       {
-      if (!originalNode->hasSymbolReference() || newSymRef != originalNode->getSymbolReference())
-         originalNode->_byteCodeInfo.setDoNotProfile(1);
-
       // need to at least set the new symbol reference on the node before returning
       if (newSymRef)
          originalNode->setSymbolReference(newSymRef);
 
+      // Transmute a node to a potentialOSRPoint
+      // Should we check if we're in ilgen?
+      // What if newSymRef is NULL
+      if (!originalNodeIsPotentialOSRPoint &&
+          comp->isPotentialOSRPoint(originalNode))
+         {
+         comp->setCannotOSRAt(originalNode);
+         }
       return originalNode;
       }
 
-   TR::Compilation * comp = TR::comp();
 //   // one may consider copy forwarding as a transformation of the old way of doing things to the new way
 //   // "untransforming" means reverting to setOpCodeValue only. However reverting may in future be a
 //   // bad thing to do, so disabling this.
@@ -590,21 +590,46 @@ OMR::Node::recreateAndCopyValidPropertiesImpl(TR::Node *originalNode, TR::ILOpCo
 
    // TODO: copyValidProperties is incomplete
    TR::Node::copyValidProperties(originalNodeCopy, node);
-   originalNode->_byteCodeInfo.setDoNotProfile(1);
 
    // add originalNodeCopy back to the node pool
    comp->getNodePool().deallocate(originalNodeCopy);
    return node;
    }
 
+static bool opCodeForPotentialOSRPoint(TR::ILOpCodes op)
+   {
+    if (op == TR::asynccheck ||
+        TR::ILOpCode(op).isCall() ||
+        op == TR::monent)
+       return true;
+
+   return false;
+   }
+
 TR::Node *
 OMR::Node::createInternal(TR::Node *originatingByteCodeNode, TR::ILOpCodes op, uint16_t numChildren, TR::Node *originalNode)
    {
    TR_ASSERT_FATAL(TR::Node::isNotDeprecatedUnsigned(op), "Trying to use a deprecated unsigned opcode: #%d \n", op);
+   TR::Compilation * comp = TR::comp();
+   bool isOpCodeForPotentialOSRPoint = opCodeForPotentialOSRPoint(op);
+
    if (!originalNode)
-      return new (TR::comp()->getNodePool()) TR::Node(originatingByteCodeNode, op, numChildren);
+      {
+      // A fresh new
+      TR::Node* node = new (TR::comp()->getNodePool()) TR::Node(originatingByteCodeNode, op, numChildren);
+      // Without a symref, we can't tell if the node is a potentialOSRPoint, but adding it to the
+      // cannotOSR list is safe because:
+      // potentialOSRPoint - can't OSR if created after ilgen
+      // other - can't OSR
+      if (!comp->getCurrentIlGenerator() &&
+          isOpCodeForPotentialOSRPoint)
+         comp->setCannotOSRAt(node);
+
+      return node;
+      }
    else
       {
+      bool originalNodeIsPotentialOSRPoint = comp->isPotentialOSRPoint(originalNode);
       // Recreate node from originalNode, ignore originatingByteCodeNode
       ncount_t globalIndex = originalNode->getGlobalIndex();
       vcount_t visitCount = originalNode->getVisitCount();
@@ -621,6 +646,12 @@ OMR::Node::createInternal(TR::Node *originatingByteCodeNode, TR::ILOpCodes op, u
       node->setLocalIndex(localIndex);
       node->setReferenceCount(referenceCount);
       node->_unionA = unionA;
+
+      // Transmuting non-potential-osr-point to something that might be a potential-osr-point
+      // Don't need to check if we're in ilgen, should we?
+      if (!originalNodeIsPotentialOSRPoint &&
+          isOpCodeForPotentialOSRPoint)
+         comp->setCannotOSRAt(node);
 
       return node;
       }
@@ -1222,10 +1253,6 @@ OMR::Node::createPotentialOSRPointHelperCallInILGen(TR::Node* originatingByteCod
    TR::Node* callNode = TR::Node::createWithSymRef(originatingByteCodeNode, TR::call, 0, TR::comp()->getSymRefTab()->findOrCreatePotentialOSRPointHelperSymbolRef());
    callNode->setOSRInductionOffset(osrInductionOffset);
 
-   // Node created outside of ilgen will have doNotProfile set, this results in OSR infrastructure believing it
-   // can not OSR at this node. Reset this flag since a potentialOSRPointHelper is a safe OSR transition point
-   //
-   callNode->getByteCodeInfo().setDoNotProfile(0);
    return callNode;
    }
 
@@ -4102,16 +4129,12 @@ void
 OMR::Node::setByteCodeInfo(const TR_ByteCodeInfo &bcInfo)
    {
    _byteCodeInfo = bcInfo;
-   if (!TR::comp()->getCurrentIlGenerator())
-      _byteCodeInfo.setDoNotProfile(1);
    }
 
 void
 OMR::Node::copyByteCodeInfo(TR::Node * from)
    {
    _byteCodeInfo = from->_byteCodeInfo;
-   if (!TR::comp()->getCurrentIlGenerator())
-      _byteCodeInfo.setDoNotProfile(1);
    }
 
 uint32_t

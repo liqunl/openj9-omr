@@ -274,10 +274,12 @@ public:
    bool detectInternalCycles();
    bool catchBlocksHaveRealPredecessors();
 
+   // liqun: cannot attempt OSR at bytecode index n of this method
    void setCannotAttemptOSR(int32_t n);
    bool cannotAttemptOSRAt(TR_ByteCodeInfo &bci, TR::Block *blockToOSRAt, TR::Compilation *comp);
    bool cannotAttemptOSRDuring(int32_t callSite, TR::Compilation *comp, bool runCleanup = true);
    bool supportsInduceOSR(TR_ByteCodeInfo &bci, TR::Block *blockToOSRAt, TR::Compilation *comp, bool runCleanup = true);
+   bool supportsInduceOSR(TR::Node* node, TR::Block *blockToOSRAt, TR::Compilation *comp, bool runCleanup = true);
    bool hasOSRProhibitions();
 
    typedef enum
