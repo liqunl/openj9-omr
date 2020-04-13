@@ -295,7 +295,8 @@ OMR::Compilation::Compilation(
    _bitVectorPool(self()),
    _typeLayoutMap((LayoutComparator()), LayoutAllocator(self()->region())),
    _target(TR::Compiler->target),
-   _tlsManager(*self())
+   _tlsManager(*self()),
+   _cantOSRNodes(NULL)
    {
 
    //Avoid expensive initialization and uneeded option checking if we are doing AOT Loads
@@ -644,6 +645,7 @@ bool OMR::Compilation::isShortRunningMethod(int32_t callerIndex)
    return false;
    }
 
+// liqun: need a function to tell if a node is potentialOSRPoint according to its bytecode?
 bool OMR::Compilation::isPotentialOSRPoint(TR::Node *node, TR::Node **osrPointNode, bool ignoreInfra)
    {
    static char *disableAsyncCheckOSR = feGetEnv("TR_disableAsyncCheckOSR");
@@ -691,7 +693,7 @@ bool OMR::Compilation::isPotentialOSRPoint(TR::Node *node, TR::Node **osrPointNo
    return potentialOSRPoint;
    }
 
-bool OMR::Compilation::isPotentialOSRPointWithSupport(TR::TreeTop *tt)
+bool OMR::Compilation::isPotentialOSRPointWithSupport(TR::TreeTop *tt, TR::Node **osrPointNode)
    {
    TR::Node *osrNode;
    bool potentialOSRPoint = self()->isPotentialOSRPoint(tt->getNode(), &osrNode);
@@ -727,9 +729,12 @@ bool OMR::Compilation::isPotentialOSRPointWithSupport(TR::TreeTop *tt)
          TR_ByteCodeInfo &bci = osrNode->getByteCodeInfo();
          TR::ResolvedMethodSymbol *method = bci.getCallerIndex() == -1 ?
             self()->getMethodSymbol() : self()->getInlinedResolvedMethodSymbol(bci.getCallerIndex());
-         potentialOSRPoint = method->supportsInduceOSR(bci, tt->getEnclosingBlock(), self(), false);
+         potentialOSRPoint = method->supportsInduceOSR(osrNode, tt->getEnclosingBlock(), self(), false);
          }
       }
+
+   if (osrPointNode && potentialOSRPoint)
+      (*osrPointNode) = osrNode;
 
    return potentialOSRPoint;
    }
@@ -1381,6 +1386,9 @@ void OMR::Compilation::decInlineDepth(bool removeInlinedCallSitesEntry)
    {
    if (removeInlinedCallSitesEntry)
       {
+      // liqun: remove all inlined calls? Including those inlined at a different
+      // call site?
+      // getCurrentInlinedSiteIndex will return -1 at if the inline stack is empty,
       while (self()->getCurrentInlinedSiteIndex() < _inlinedCallSites.size())
          _inlinedCallSites.remove(self()->getCurrentInlinedSiteIndex());
       if (self()->getOption(TR_EnableOSR))
@@ -2378,6 +2386,28 @@ void
 OMR::Compilation::setCannotAttemptOSRDuring(uint32_t index, bool cannotOSR)
    {
    _inlinedCallSites[index].setCannotAttemptOSRDuring(cannotOSR);
+   }
+
+void
+OMR::Compilation::setCannotOSRAt(TR::Node* node)
+   {
+   if (self()->supportsInduceOSR() &&
+       self()->isOSRTransitionTarget(TR::postExecutionOSR) &&
+       self()->getOSRMode() == TR::voluntaryOSR &&
+       !self()->isPeekingMethod())
+      {
+      // liqun: should only
+      if (!_cantOSRNodes)
+         _cantOSRNodes = new (self()->trHeapMemory()) TR::NodeChecklist(self());
+
+      _cantOSRNodes->add(node);
+      }
+   }
+
+bool
+OMR::Compilation::cannotOSRAt(TR::Node* node)
+   {
+   return _cantOSRNodes && _cantOSRNodes->contains(node);
    }
 
 TR_InlinedCallSite *
