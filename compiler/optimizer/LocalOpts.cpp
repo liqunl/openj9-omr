@@ -7427,23 +7427,58 @@ void TR_InvariantArgumentPreexistence::processIndirectCall(TR::Node *node, TR::T
                {
                // will exit without performing any transformation
                //fprintf(stderr, "will not perform devirt\n");
+               if (trace())
+                  {
+                  traceMsg(comp(), "PREX:    has invalidations and no single concrete subclass, quiting\n");
+                  }
                }
             else if (methSymbol->isInterface())
                {
                if (comp()->getPersistentInfo()->getRuntimeAssumptionTable()->getAssumptionCount(RuntimeAssumptionOnClassExtend) < 100000)
+                  {
                   method = chTable->findSingleInterfaceImplementer(receiverInfo->getClass(), node->getSymbolReference()->getCPIndex(), node->getSymbolReference()->getOwningMethod(comp()), comp());
+                  }
+               else
+                  {
+                     if (trace())
+                     {
+                     traceMsg(comp(), "PREX:    too many runtime assumption on class extend, quiting\n");
+                     }
+                   return;
+                  }
                //if (method)
                //   fprintf(stderr, "%s assumptios=%d\n", comp()->signature(), comp()->getPersistentInfo()->getRuntimeAssumptionTable()->getAssumptionCount(RuntimeAssumptionOnClassExtend));
                }
             else
                {
                if (resolvedMethod->isAbstract())
+                  {
                   method = chTable->findSingleAbstractImplementer(receiverInfo->getClass(), symRef->getOffset(), node->getSymbolReference()->getOwningMethod(comp()), comp());
+                  if (trace())
+                    traceMsg(comp(), "PREX:    non-abstract virtual method is overridden in this class hierarchy, quiting\n");
+                  }
                else if (!chTable->isOverriddenInThisHierarchy(resolvedMethod, receiverInfo->getClass(), symRef->getOffset(), comp()))
                   {
                   method = symRef->getOwningMethod(comp())->getResolvedVirtualMethod(comp(), receiverInfo->getClass(), symRef->getOffset());
                   newMethod = false;
                   }
+               else
+                  {
+                    if (trace())
+                     {
+                     traceMsg(comp(), "PREX:    non-abstract virtual method is overridden in this class hierarchy, quiting\n");
+                     }
+                  return;
+                  }
+               }
+
+            if (method && method->virtualMethodIsOverridden())
+               {
+                 if (trace())
+                  {
+                  traceMsg(comp(), "PREX:    found a singple implementer but it's been overriden, quiting\n");
+                  }
+               return;
                }
 
             if (method && !method->virtualMethodIsOverridden())
@@ -7461,11 +7496,21 @@ void TR_InvariantArgumentPreexistence::processIndirectCall(TR::Node *node, TR::T
                   if ((comp()->getMethodHotness() == warm) &&
                         classInfo &&
                         classInfo->getNumPrexAssumptions() > comp()->getOptions()->getMaxNumPrexAssumptions())
+                     {
                      addAssumptions = false;
+                     if (trace())
+                      {
+                      traceMsg(comp(), "PREX:    hotness is not warm, or no class info, or reached MaxNumPrexAssumptions, quiting\n");
+                      }
+                     }
 
                   // check the subclasses as well
                   if (classInfo && addAssumptions)
                      {
+                     if (trace())
+                      {
+                      traceMsg(comp(), "PREX:    Adding prex assumption for subclasses\n");
+                      }
                      TR_ScratchList<TR_PersistentClassInfo> subClasses(trMemory());
                      TR_ClassQueries::collectAllSubClasses(classInfo, &subClasses, comp());
                      ListIterator<TR_PersistentClassInfo> subClassesIt(&subClasses);
@@ -7473,6 +7518,10 @@ void TR_InvariantArgumentPreexistence::processIndirectCall(TR::Node *node, TR::T
                         {
                         if (subClassInfo->getNumPrexAssumptions() > comp()->getOptions()->getMaxNumPrexAssumptions())
                            {
+                           if (trace())
+                            {
+                            traceMsg(comp(), "PREX:    reached MaxNumPrexAssumptions on subclass, quiting\n");
+                            }
                            addAssumptions = false;
                            break;
                            }
