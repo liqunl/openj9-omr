@@ -28,6 +28,7 @@
 #include "il/ParameterSymbol.hpp"
 #include "il/Symbol.hpp"
 #include "infra/Flags.hpp"
+#include "compile/Compilation.hpp"
 
 TR::ParameterSymbol *
 OMR::ParameterSymbol::self()
@@ -41,6 +42,11 @@ OMR::ParameterSymbol::ParameterSymbol(TR::DataType d, int32_t slot) :
    _allocatedHigh(-1),
    _allocatedLow(-1),
    _fixedType(0),
+   _profiledType(0),
+   _profiledTypeLength(0),
+   _profiledClass(0),
+   _profiledClassNum(PCN_unknown),
+   _isInvariant(true),
    _isPreexistent(false),
    _knownObjectIndex(TR::KnownObjectTable::UNKNOWN)
    {
@@ -55,12 +61,79 @@ OMR::ParameterSymbol::ParameterSymbol(TR::DataType d, int32_t slot, size_t size)
    _allocatedHigh(-1),
    _allocatedLow(-1),
    _fixedType(0),
+   _profiledType(0),
+   _profiledTypeLength(0), _profiledClass(0),
+   _profiledClassNum(PCN_unknown),
+   _isInvariant(true),
    _isPreexistent(false),
    _knownObjectIndex(TR::KnownObjectTable::UNKNOWN)
    {
    _flags.setValue(KindMask, IsParameter);
    _addressSize = TR::ParameterSymbol::convertTypeToSize(TR::Address);
    self()->setOffset(slot * TR::ParameterSymbol::convertTypeToSize(TR::Address));
+   }
+
+/* only to be called after ilgen finished */
+const char*
+OMR::ParameterSymbol::getSingleProfiledType(TR::Compilation* comp, int32_t &len)
+   {
+   if (_profiledClass)
+      {
+      if (!_profiledType)
+         {
+         _profiledType = TR::Compiler->cls.classNameChars(comp, _profiledClass, _profiledTypeLength);
+         }
+      len = _profiledTypeLength;
+      return _profiledType;
+      }
+
+   return NULL;
+   }
+
+TR_OpaqueClassBlock*
+OMR::ParameterSymbol::getSingleProfiledClass()
+   {
+   return _profiledClass;
+   }
+
+void
+OMR::ParameterSymbol::setSingleProfiledClass(TR_OpaqueClassBlock* clazz)
+   {
+   TR_ASSERT_FATAL(clazz, "clazz should not be NULL");
+   if (!clazz) return;
+
+   // First profiled class
+   if (_profiledClassNum == PCN_unknown)
+      {
+      _profiledClass = clazz;
+      _profiledClassNum = PCN_one;
+      }
+   // Already has a profiled class
+   else if (_profiledClassNum == PCN_one &&
+            clazz != _profiledClass )
+      {
+      _profiledClass = NULL;
+      _profiledClassNum = PCN_moreThanOne;
+      }
+   }
+
+void
+OMR::ParameterSymbol::setHasMoreThanOneProfiledClass()
+   {
+   _profiledClass = NULL;
+   _profiledClassNum = PCN_moreThanOne;
+   }
+
+TR_YesNoMaybe
+OMR::ParameterSymbol::hasMoreThanOneProfiledClass()
+   {
+   switch (_profiledClassNum)
+      {
+      case PCN_unknown: return TR_maybe;
+      case PCN_one: return TR_yes;
+      }
+
+   return TR_no;
    }
 
 void

@@ -4681,6 +4681,50 @@ bool OMR_InlinerPolicy::tryToInlineTrivialMethod (TR_CallStack* callStack, TR_Ca
    return false;
    }
 
+static const char *
+getVirtualGuardKindName(TR_VirtualGuardKind kind)
+   {
+   switch (kind)
+      {
+      case TR_NoGuard:
+         return "NoGuard";
+      case TR_ProfiledGuard:
+         return "ProfiledGuard";
+      case TR_InterfaceGuard:
+         return "InterfaceGuard";
+      case TR_AbstractGuard:
+         return "AbstractGuard";
+      case TR_HierarchyGuard:
+         return "HierarchyGuard";
+      case TR_NonoverriddenGuard:
+         return "NonoverriddenGuard";
+      case TR_SideEffectGuard:
+         return "SideEffectGuard";
+      case TR_DummyGuard:
+         return "DummyGuard";
+      case TR_HCRGuard:
+         return "HCRGuard";
+      case TR_MutableCallSiteTargetGuard:
+         return "MutableCallSiteTargetGuard";
+      case TR_MethodEnterExitGuard:
+         return "MethodEnterExitGuard";
+      case TR_DirectMethodGuard:
+         return "DirectMethodGuard";
+      case TR_InnerGuard:
+         return "InnerGuard";
+      case TR_ArrayStoreCheckGuard:
+         return "ArrayStoreCheckGuard";
+      case TR_OSRGuard:
+         return "OSRGuard";
+      case TR_BreakpointGuard:
+         return "BreakpointGuard";
+      default:
+         break;
+      }
+   TR_ASSERT(0, "Unknown virtual guard kind");
+   return "(unknown virtual guard kind)";
+   }
+
 //returns false when inlining fails
 //TODO: currently this method returns true in some cases when the inlining fails. This needs to be fixed
 bool TR_InlinerBase::inlineCallTarget2(TR_CallStack * callStack, TR_CallTarget *calltarget, TR::TreeTop** cursorTreeTop, bool inlinefromgraph, int32_t)
@@ -4977,6 +5021,99 @@ bool TR_InlinerBase::inlineCallTarget2(TR_CallStack * callStack, TR_CallTarget *
    TR::TreeTop * startOfInlinedCall = calleeSymbol->getFirstTreeTop()->getNextTreeTop();
    TR::Block * calleeFirstBlock = calleeSymbol->getFirstTreeTop()->getEnclosingBlock();
    TR::Block * calleeLastBlock = calleeSymbol->getLastTreeTop()->getEnclosingBlock();
+
+   // liqun: debug counter for hottest profiled class on invocations on parms
+   // q1: when we inline a call from an inlined body, does the call node tell us the receiver is from parm?
+   // or we may have to go through the trees at a point other opts have make it easier to tell?
+   // what about calls inlined with nopable guard? if we look at it outside of inliner, do we know what call it is for?
+   // I think so. As when we find the guard, we can get the original call from the taken side.
+   // so,go through the guards, find its original call, if the call's receiver is a parm, check if the parm has only one profiled
+   // type. If so, insert a debug counter to the inlined body.
+   // q2: how do we get debug counters for calls that are not inlined?
+   // a2: do it in codegen. debug counter if there is only one profiled type
+   TR::MethodSymbol* sym = callNode->getSymbol()->castToMethodSymbol();
+   TR::Node* receiver = sym->firstArgumentIsReceiver() ? callNode->getFirstArgument() : NULL;
+   TR::ParameterSymbol* parm = NULL;
+   if (receiver &&
+       receiver->getOpCode().hasSymbolReference() &&
+       receiver->getSymbol()->isParm())
+      parm = receiver->getSymbol()->getParmSymbol();
+
+   bool canHaveBodyGuardOnReceiver = parm ? parm->getIsInvariant() && parm->getSingleProfiledClass() : false;
+   // debug counter to get number of guards that can be eliminated with the presence of body guards
+   if (false && callNode->getOpCode().isIndirect() && receiver && guard->_kind != TR_NoGuard)
+      {
+      const char *name = NULL;
+      if (canHaveBodyGuardOnReceiver)
+         {
+         name = TR::DebugCounter::debugCounterName(comp(), "quarkus-inlinedIndirectCall/receiverIsParm/singleProfiledClass/%s", getVirtualGuardKindName(guard->_kind));
+         }
+      else if (parm)
+         {
+         name = TR::DebugCounter::debugCounterName(comp(), "quarkus-inlinedIndirectCall/receiverIsParm/parmHasMoreThanOneProfiledClass/%s", getVirtualGuardKindName(guard->_kind));
+         }
+      else
+         {
+         name = TR::DebugCounter::debugCounterName(comp(), "quarkus-inlinedIndirectCall/receiverIsNotParm/%s", getVirtualGuardKindName(guard->_kind));
+         }
+      TR::DebugCounter::prependDebugCounter(comp(), name, startOfInlinedCall);
+      startOfInlinedCall = startOfInlinedCall->getPrevTreeTop();
+      }
+
+   if (false && receiver && guard->_kind == TR_ProfiledGuard)
+      {
+      if (parm)
+         {
+         // if parm has only one profiled class
+         if (parm->getIsInvariant() && parm->getSingleProfiledClass())
+            {
+            const char *name = TR::DebugCounter::debugCounterName(comp(), "quarkus-typetest/singleProfiledClass/inliner/(%s)/(parm%d-%p",
+                               comp()->signature(),
+                               parm->getOrdinal(),
+                               //parm->getSingleProfiledType(comp(), trMemory()));
+                               parm->getSingleProfiledClass());
+            TR::DebugCounter::prependDebugCounter(comp(), name, startOfInlinedCall);
+            }
+         else
+            {
+            const char *name = TR::DebugCounter::debugCounterName(comp(), "quarkus-typetest/parmHasMoreThanOneProfiledClass/inliner/(%s)",
+                               comp()->signature());
+            TR::DebugCounter::prependDebugCounter(comp(), name, startOfInlinedCall);
+            }
+         }
+      else
+         {
+         // not a parm
+         const char *name = TR::DebugCounter::debugCounterName(comp(), "quarkus-typetest/receiverIsNotParm/inliner");
+         TR::DebugCounter::prependDebugCounter(comp(), name, startOfInlinedCall);
+         }
+      startOfInlinedCall = startOfInlinedCall->getPrevTreeTop();
+      }
+
+   if (false && guard->_kind == TR_ProfiledGuard)
+      {
+      const char *name = TR::DebugCounter::debugCounterName(comp(), "quarkus-calls/typetest/inliner/(%s)", comp()->signature());
+      TR::DebugCounter::prependDebugCounter(comp(), name, startOfInlinedCall);
+      startOfInlinedCall = startOfInlinedCall->getPrevTreeTop();
+      }
+
+   if (false && callNode->getOpCode().isIndirect())
+      {
+   const char *callType = sym->isInterface() ? "interface" : sym->isVirtual() ? "virtual" : "other";
+   const char *invokeWrongMethod = calltarget->_myCallSite->_callSiteClass ? "invokeOnInterface" : "invokeOnVirtual";
+   const char *name = TR::DebugCounter::debugCounterName(comp(), "quarkus-calls/inlined/%s/%s/(%s)",
+      callType,
+      //invokeWrongMethod,
+      getVirtualGuardKindName(guard->_kind),
+      calleeSymbol->signature(trMemory()));
+   TR::DebugCounter::prependDebugCounter(comp(), name, startOfInlinedCall);
+   startOfInlinedCall = startOfInlinedCall->getPrevTreeTop();
+      }
+   else if (false && !callNode->getOpCode().isIndirect())
+      {
+      TR::DebugCounter::prependDebugCounter(comp(), "quarkus-calls/inlined/direct", startOfInlinedCall);
+      startOfInlinedCall = startOfInlinedCall->getPrevTreeTop();
+      }
 
    if (pam.firstTempTreeTop())
       {
@@ -5645,6 +5782,7 @@ TR_CallSite::TR_CallSite(TR_ResolvedMethod *callerResolvedMethod,
    _callNode(callNode),
    _interfaceMethod(interfaceMethod),
    _receiverClass(receiverClass),
+   _callSiteClass(NULL),
    _vftSlot(vftSlot),
    _cpIndex(cpIndex),
    _initialCalleeMethod(initialCalleeMethod),
@@ -6271,6 +6409,7 @@ const char * TR_InlinerTracer::getGuardTypeString(TR_VirtualGuardSelection *guar
    else
       return "???Test";
    }
+
 
 TR_InlinerDelimiter::TR_InlinerDelimiter(TR_InlinerTracer *tracer, char * tag)
    :_tracer(tracer),_tag(tag)

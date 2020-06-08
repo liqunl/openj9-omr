@@ -312,6 +312,7 @@ struct TR_CallSite : public TR_Link<TR_CallSite>
          _myRemovedTargets(0, other._comp->allocator()),
          _parent (other._parent),
          _receiverClass (other._receiverClass),
+         _callSiteClass(other._callSiteClass),
          _stmtNo (other._stmtNo),
          _unavailableTemps (other._comp->trMemory()),
          _unavailableBlockTemps (other._comp->trMemory()),
@@ -381,6 +382,7 @@ struct TR_CallSite : public TR_Link<TR_CallSite>
       // Initial Information We Need to Calculate a CallTarget
       TR::Method *                 _interfaceMethod;       // If we have an interface, we'll only have a TR::Method until we determine others
       TR_OpaqueClassBlock *        _receiverClass;         // for interface calls, we might know this?
+      TR_OpaqueClassBlock *        _callSiteClass;         // for interface calls, we might know this?
       int32_t                      _vftSlot;               //
       int32_t                      _cpIndex;               //
       TR_ResolvedMethod *          _initialCalleeMethod;    // alot of times we might already know the resolved method.

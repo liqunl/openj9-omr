@@ -38,6 +38,10 @@ namespace OMR { typedef OMR::ParameterSymbol ParameterSymbolConnector; }
 #include "il/RegisterMappedSymbol.hpp"
 
 namespace TR { class ParameterSymbol; }
+namespace TR { class Compilation; }
+class TR_Memory;
+
+enum ProfiledClassNum{ PCN_one, PCN_moreThanOne, PCN_unknown };
 
 namespace OMR
 {
@@ -122,7 +126,23 @@ public:
    void           setTypeSignature(const char * s, int32_t l) { _typeLength = l; _typeSignature = s; }
    const char *   getTypeSignature(int32_t & len) { len = _typeLength; return _typeSignature; }
 
+   const char*    getSingleProfiledType(TR::Compilation* comp, int32_t &len);
+   TR_OpaqueClassBlock*    getSingleProfiledClass();
+   void     setSingleProfiledClass(TR_OpaqueClassBlock* t);
+   void     setHasMoreThanOneProfiledClass();
+   TR_YesNoMaybe hasMoreThanOneProfiledClass();
+
+   // getIsInvariant is only to be used after ilgen
+   bool     getIsInvariant()                 { return _isInvariant; }
+   void     setIsVariant()           { _isInvariant = false; }
+
 private:
+
+   const char *                _profiledType;
+   int32_t                     _profiledTypeLength;
+   TR_OpaqueClassBlock*        _profiledClass;
+   bool                        _isInvariant;
+   ProfiledClassNum            _profiledClassNum;
 
    const char *                _typeSignature;
    void *                      _fixedType;
