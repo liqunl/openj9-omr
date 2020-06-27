@@ -45,7 +45,7 @@ OMR::ParameterSymbol::ParameterSymbol(TR::DataType d, int32_t slot) :
    _profiledType(0),
    _profiledTypeLength(0),
    _profiledClass(0),
-   _profiledClassNum(PCN_unknown),
+   _profiledClassProb(0.0f),
    _isInvariant(true),
    _isPreexistent(false),
    _knownObjectIndex(TR::KnownObjectTable::UNKNOWN)
@@ -62,8 +62,9 @@ OMR::ParameterSymbol::ParameterSymbol(TR::DataType d, int32_t slot, size_t size)
    _allocatedLow(-1),
    _fixedType(0),
    _profiledType(0),
-   _profiledTypeLength(0), _profiledClass(0),
-   _profiledClassNum(PCN_unknown),
+   _profiledTypeLength(0),
+   _profiledClass(0),
+   _profiledClassProb(0.0f),
    _isInvariant(true),
    _isPreexistent(false),
    _knownObjectIndex(TR::KnownObjectTable::UNKNOWN)
@@ -75,7 +76,7 @@ OMR::ParameterSymbol::ParameterSymbol(TR::DataType d, int32_t slot, size_t size)
 
 /* only to be called after ilgen finished */
 const char*
-OMR::ParameterSymbol::getSingleProfiledType(TR::Compilation* comp, int32_t &len)
+OMR::ParameterSymbol::getDominantProfiledType(TR::Compilation* comp, int32_t &len)
    {
    if (_profiledClass)
       {
@@ -91,49 +92,20 @@ OMR::ParameterSymbol::getSingleProfiledType(TR::Compilation* comp, int32_t &len)
    }
 
 TR_OpaqueClassBlock*
-OMR::ParameterSymbol::getSingleProfiledClass()
+OMR::ParameterSymbol::getDominantProfiledClass(float* prob)
    {
+   if (prob) *prob = _profiledClassProb;
    return _profiledClass;
    }
 
 void
-OMR::ParameterSymbol::setSingleProfiledClass(TR_OpaqueClassBlock* clazz)
+OMR::ParameterSymbol::setDominantProfiledClass(TR_OpaqueClassBlock* clazz, float p)
    {
    TR_ASSERT_FATAL(clazz, "clazz should not be NULL");
    if (!clazz) return;
 
-   // First profiled class
-   if (_profiledClassNum == PCN_unknown)
-      {
-      _profiledClass = clazz;
-      _profiledClassNum = PCN_one;
-      }
-   // Already has a profiled class
-   else if (_profiledClassNum == PCN_one &&
-            clazz != _profiledClass )
-      {
-      _profiledClass = NULL;
-      _profiledClassNum = PCN_moreThanOne;
-      }
-   }
-
-void
-OMR::ParameterSymbol::setHasMoreThanOneProfiledClass()
-   {
-   _profiledClass = NULL;
-   _profiledClassNum = PCN_moreThanOne;
-   }
-
-TR_YesNoMaybe
-OMR::ParameterSymbol::hasMoreThanOneProfiledClass()
-   {
-   switch (_profiledClassNum)
-      {
-      case PCN_unknown: return TR_maybe;
-      case PCN_one: return TR_yes;
-      }
-
-   return TR_no;
+   _profiledClass = clazz;
+   _profiledClassProb = p;
    }
 
 void

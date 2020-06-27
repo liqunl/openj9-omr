@@ -5039,7 +5039,8 @@ bool TR_InlinerBase::inlineCallTarget2(TR_CallStack * callStack, TR_CallTarget *
        receiver->getSymbol()->isParm())
       parm = receiver->getSymbol()->getParmSymbol();
 
-   bool canHaveBodyGuardOnReceiver = parm ? parm->getIsInvariant() && parm->getSingleProfiledClass() : false;
+   //bool canHaveBodyGuardOnReceiver = parm ? parm->getIsInvariant() && parm->getSingleProfiledClass() : false;
+   bool canHaveBodyGuardOnReceiver = false;
    // debug counter to get number of guards that can be eliminated with the presence of body guards
    if (false && callNode->getOpCode().isIndirect() && receiver && guard->_kind != TR_NoGuard)
       {
