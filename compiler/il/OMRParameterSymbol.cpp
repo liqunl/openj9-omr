@@ -28,6 +28,7 @@
 #include "il/ParameterSymbol.hpp"
 #include "il/Symbol.hpp"
 #include "infra/Flags.hpp"
+#include "compile/Compilation.hpp"
 
 TR::ParameterSymbol *
 OMR::ParameterSymbol::self()
@@ -41,6 +42,11 @@ OMR::ParameterSymbol::ParameterSymbol(TR::DataType d, int32_t slot) :
    _allocatedHigh(-1),
    _allocatedLow(-1),
    _fixedType(0),
+   _profiledType(0),
+   _profiledTypeLength(0),
+   _profiledClass(0),
+   _profiledClassProb(0.0f),
+   _isInvariant(true),
    _isPreexistent(false),
    _knownObjectIndex(TR::KnownObjectTable::UNKNOWN)
    {
@@ -55,12 +61,51 @@ OMR::ParameterSymbol::ParameterSymbol(TR::DataType d, int32_t slot, size_t size)
    _allocatedHigh(-1),
    _allocatedLow(-1),
    _fixedType(0),
+   _profiledType(0),
+   _profiledTypeLength(0),
+   _profiledClass(0),
+   _profiledClassProb(0.0f),
+   _isInvariant(true),
    _isPreexistent(false),
    _knownObjectIndex(TR::KnownObjectTable::UNKNOWN)
    {
    _flags.setValue(KindMask, IsParameter);
    _addressSize = TR::ParameterSymbol::convertTypeToSize(TR::Address);
    self()->setOffset(slot * TR::ParameterSymbol::convertTypeToSize(TR::Address));
+   }
+
+/* only to be called after ilgen finished */
+const char*
+OMR::ParameterSymbol::getDominantProfiledType(TR::Compilation* comp, int32_t &len)
+   {
+   if (_profiledClass)
+      {
+      if (!_profiledType)
+         {
+         _profiledType = TR::Compiler->cls.classNameChars(comp, _profiledClass, _profiledTypeLength);
+         }
+      len = _profiledTypeLength;
+      return _profiledType;
+      }
+
+   return NULL;
+   }
+
+TR_OpaqueClassBlock*
+OMR::ParameterSymbol::getDominantProfiledClass(float* prob)
+   {
+   if (prob) *prob = _profiledClassProb;
+   return _profiledClass;
+   }
+
+void
+OMR::ParameterSymbol::setDominantProfiledClass(TR_OpaqueClassBlock* clazz, float p)
+   {
+   TR_ASSERT_FATAL(clazz, "clazz should not be NULL");
+   if (!clazz) return;
+
+   _profiledClass = clazz;
+   _profiledClassProb = p;
    }
 
 void
