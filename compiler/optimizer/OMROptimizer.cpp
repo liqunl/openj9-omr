@@ -549,6 +549,7 @@ static const OptimizationStrategy ilgenStrategyOpts[] =
    { recognizedCallTransformer                     },
    { coldBlockMarker                               },
    { CFGSimplification                             },
+   { bodyGuardInsertion                            },
    { allocationSinking,             IfNews         },
    { invariantArgumentPreexistence, IfNotClassLoadPhaseAndNotProfiling }, // Should not run if a recompilation is possible
 #endif

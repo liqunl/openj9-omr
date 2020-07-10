@@ -1109,6 +1109,7 @@ TR::OptionTable OMR::Options::_jitOptions[] = {
    {"traceBlockFrequencyGeneration",    "L\ttrace block frequency generation",             SET_OPTION_BIT(TR_TraceBFGeneration), "P"},
    {"traceBlockShuffling",              "L\ttrace random rearrangement of blocks",         TR::Options::traceOptimization, blockShuffling, 0, "P"},
    {"traceBlockSplitter",               "L\ttrace block splitter",                         TR::Options::traceOptimization, blockSplitter, 0, "P"},
+   {"traceBodyGuardInsertion",          "L\ttrace body guard insertion",                   TR::Options::traceOptimization, bodyGuardInsertion, 0, "P"},
    {"traceBVA",                         "L\ttrace bit vector analysis",                    SET_OPTION_BIT(TR_TraceBVA), "P" },
    {"traceCatchBlockRemoval",           "L\ttrace catch block removal",                    TR::Options::traceOptimization, catchBlockRemoval, 0, "P"},
    {"traceCFGSimplification",           "L\ttrace Control Flow Graph simplification",      TR::Options::traceOptimization, CFGSimplification, 0, "P"},

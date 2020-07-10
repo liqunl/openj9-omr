@@ -75,6 +75,7 @@
    OPTIMIZATION(virtualGuardTailSplitter)
    OPTIMIZATION(expressionsSimplification)
    OPTIMIZATION(blockSplitter)
+   OPTIMIZATION(bodyGuardInsertion)
    OPTIMIZATION(invariantArgumentPreexistence)
    OPTIMIZATION(dataAccessAccelerator)
    OPTIMIZATION(stringBuilderTransformer)
