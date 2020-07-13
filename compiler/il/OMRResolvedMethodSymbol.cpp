@@ -474,6 +474,71 @@ OMR::ResolvedMethodSymbol::genInduceOSRCallNode(TR::TreeTop* insertionPoint,
  *          is generated successfully
  */
 bool
+OMR::ResolvedMethodSymbol::induceOSRAtMethodEntryAndRecompile(TR::TreeTop* branch,
+    bool extendRemainder, TR::TreeTop ** lastTreeTop)
+   {
+   TR_ByteCodeInfo induceBCI;
+   induceBCI.setCallerIndex(-1);
+   induceBCI.setByteCodeIndex(0);
+   return induceOSRAfterAndRecompile(self()->comp()->getStartTree(), induceBCI, branch, extendRemainder, 0 /*offset*/, lastTreeTop);
+   }
+/*
+ *  \brief Generate the helper call to request for OSR transition only.
+ *
+ *  \return true if the OSR transition is supported at the requested \parm induceBCI and the OSR induction helper call
+ *          is generated successfully
+ */
+bool
+OMR::ResolvedMethodSymbol::induceOSRAtMethodEntry(TR::TreeTop* branch,
+    bool extendRemainder, TR::TreeTop ** lastTreeTop)
+   {
+   TR_ByteCodeInfo induceBCI;
+   induceBCI.setCallerIndex(-1);
+   induceBCI.setByteCodeIndex(0);
+   return self()->induceOSRAfterImpl(self()->comp()->getStartTree(), induceBCI, branch, extendRemainder, 0 /*offset*/, lastTreeTop) != NULL;
+   }
+
+/*
+ *  \brief Generate the helper call to request for OSR transition and recompilation of the current compiled method.
+ *
+ *  \return true if the OSR transition is supported at the requested \parm induceBCI and the OSR induction helper call
+ *          is generated successfully
+ */
+bool
+OMR::ResolvedMethodSymbol::induceOSRAfterAndRecompile(TR::TreeTop *insertionPoint, TR::Node* osrNode, TR::TreeTop* branch,
+    bool extendRemainder, TR::TreeTop ** lastTreeTop)
+   {
+   TR_ASSERT(self()->comp()->allowRecompilation(), "request OSR and recompilation at node %p when recomp is disabled\n", insertionPoint);
+   // liqun: which one should i use?
+   //if (!self()->supportsInduceOSR(osrNode, insertionPoint->getEnclosingBlock(), self()->comp()))
+   if (self()->comp()->cannotAttemptOSRAt(osrNode))
+      return false;
+
+   return self()->induceOSRAfterAndRecompile(insertionPoint, osrNode->getByteCodeInfo(), branch, extendRemainder, self()->comp()->getOSRInductionOffset(osrNode), lastTreeTop);
+   }
+
+/*
+ *  \brief Generate the helper call to request for OSR transition only.
+ *
+ *  \return true if the OSR transition is supported at the requested \parm induceBCI and the OSR induction helper call
+ *          is generated successfully
+ */
+bool
+OMR::ResolvedMethodSymbol::induceOSRAfter(TR::TreeTop *insertionPoint, TR::Node* osrNode, TR::TreeTop* branch,
+    bool extendRemainder, TR::TreeTop ** lastTreeTop)
+   {
+   if (self()->comp()->cannotAttemptOSRAt(osrNode))
+      return false;
+
+   return self()->induceOSRAfterImpl(insertionPoint, osrNode->getByteCodeInfo(), branch, extendRemainder, self()->comp()->getOSRInductionOffset(osrNode), lastTreeTop) != NULL;
+   }
+/*
+ *  \brief Generate the helper call to request for OSR transition and recompilation of the current compiled method.
+ *
+ *  \return true if the OSR transition is supported at the requested \parm induceBCI and the OSR induction helper call
+ *          is generated successfully
+ */
+bool
 OMR::ResolvedMethodSymbol::induceOSRAfterAndRecompile(TR::TreeTop *insertionPoint, TR_ByteCodeInfo induceBCI, TR::TreeTop* branch,
     bool extendRemainder, int32_t offset, TR::TreeTop ** lastTreeTop)
    {
@@ -1421,6 +1486,48 @@ OMR::ResolvedMethodSymbol::resetLiveLocalIndices()
    }
 
 bool
+OMR::ResolvedMethodSymbol::supportsInduceOSR(TR::TreeTop* tt,
+                                           TR::Compilation *comp,
+                                           bool runCleanup)
+   {
+   TR::Node* osrNode = NULL;
+   bool potentialOSRPoint = comp->isPotentialOSRPoint(tt->getNode(), &osrNode);
+   if (!potentialOSRPoint || comp->cannotAttemptOSRAt(osrNode))
+      return false;
+
+   return self()->supportsInduceOSR(osrNode->getByteCodeInfo(), tt->getEnclosingBlock(), comp, runCleanup);
+   }
+
+bool
+OMR::ResolvedMethodSymbol::supportsInduceOSR(TR::Node* node,
+                                           TR::Block *blockToOSRAt,
+                                           TR::Compilation *comp,
+                                           bool runCleanup)
+   {
+   // liqun: node has to be potential osr node
+   if (comp->cannotAttemptOSRAt(node))
+      return false;
+
+   return self()->supportsInduceOSR(node->getByteCodeInfo(), blockToOSRAt, comp, runCleanup);
+   }
+
+// liqun: is this needed? Maybe a node bci is enough?
+bool
+OMR::ResolvedMethodSymbol::supportsInduceOSRAtMethodEntry(TR::Compilation *comp,
+                                           bool runCleanup)
+   {
+   TR_ASSERT(self() == comp->getJittedMethodSymbol(), "supportsInduceOSRAtMethodEntry should be called on outer most method");
+   TR_ByteCodeInfo nodeBCI;
+   nodeBCI.setCallerIndex(-1);
+   nodeBCI.setByteCodeIndex(0);
+   // getFirstTreeTop may return NULL if ilgen hasn't run for this method
+   // should we move this function to comp? TODO?
+   TR::Block* blockToOSRAt = comp->getStartTree()->getEnclosingBlock();
+
+   return self()->supportsInduceOSR(nodeBCI, blockToOSRAt, comp, runCleanup);
+   }
+
+bool
 OMR::ResolvedMethodSymbol::supportsInduceOSR(TR_ByteCodeInfo &bci,
                                            TR::Block *blockToOSRAt,
                                            TR::Compilation *comp,
@@ -1525,19 +1632,6 @@ OMR::ResolvedMethodSymbol::cannotAttemptOSRDuring(int32_t callSite, TR::Compilat
             cannotAttemptOSR = true;
             break;
             }
-
-         // In voluntaryOSR mode, check the caller existed during ILGen because
-         // there is no OSR support for call nodes created outside of ILGen.
-         //
-         // In involuntaryOSR node, yield points are always OSR points and there should be OSR
-         // support for very yield point under this mode.
-         if (callSiteInfo._byteCodeInfo.doNotProfile() && comp->getOSRMode() == TR::voluntaryOSR)
-            {
-            if (comp->getOption(TR_TraceOSR))
-               traceMsg(comp, "Cannot attempt OSR during caller bytecode index %d:%d as it did not exist at ilgen\n", callSite, byteCodeIndex);
-            cannotAttemptOSR = true;
-            break;
-            }
          }
       else
          break;
@@ -1576,15 +1670,6 @@ OMR::ResolvedMethodSymbol::cannotAttemptOSRAt(TR_ByteCodeInfo &bci,
       {
       if (comp->getOption(TR_TraceOSR))
          traceMsg(comp, "Cannot attempt OSR at bytecode index %d:%d\n",
-            callSite, byteCodeIndex);
-      return true;
-      }
-
-   // Check the BCI existed at ilgen
-   if (bci.doNotProfile())
-      {
-      if (comp->getOption(TR_TraceOSR))
-         traceMsg(comp, "Cannot attempt OSR at bytecode index %d:%d as it did not exist at ilgen\n",
             callSite, byteCodeIndex);
       return true;
       }

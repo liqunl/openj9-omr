@@ -100,6 +100,7 @@ namespace TR { class KnownObjectTable; }
 namespace TR { class LabelSymbol; }
 namespace TR { class Node; }
 namespace TR { class NodePool; }
+namespace TR { class NodeChecklist; }
 namespace TR { class Options; }
 namespace TR { class Optimizer; }
 namespace TR { class Recompilation; }
@@ -669,6 +670,9 @@ public:
    bool isInlinedDirectCall(uint32_t index);
    bool cannotAttemptOSRDuring(uint32_t index);
    void setCannotAttemptOSRDuring(uint32_t index, bool cannot);
+   void addOSRNode(TR::Node* node);
+   void removeOSRNode(TR::Node* node);
+   bool isOSRNode(TR::Node* node);
 
    TR_InlinedCallSite *getCurrentInlinedCallSite();
    int32_t getCurrentInlinedSiteIndex();
@@ -924,7 +928,7 @@ public:
     * removed, this call will always return false.
     */
    bool isPotentialOSRPoint(TR::Node *node, TR::Node **osrPointNode=NULL, bool ignoreInfra=false);
-   bool isPotentialOSRPointWithSupport(TR::TreeTop *tt);
+   bool isPotentialOSRPointWithSupport(TR::TreeTop *tt, TR::Node **osrPointNode=NULL);
 
    TR::OSRMode getOSRMode();
    TR::OSRTransitionTarget getOSRTransitionTarget();
@@ -1293,6 +1297,7 @@ private:
    TR::NodePool                      *_compilationNodes;
 
    TR::SparseBitVector _copyPropagationRematerializationCandidates;
+   TR::NodeChecklist*  _cannotOSRNodes;
 
    // Length of the last node OpCode that was printed. This should get reset to 0 at the beginning of a line where it is needed, e.g. for printing optimization trees
    // it gets set to 0 in TR_Debug::printBasicPreNodeInfoAndIndent() which preceeds node opCode printouts. Any methods that print parts of node opCodes should

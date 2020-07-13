@@ -171,7 +171,11 @@ public:
    bool canInjectInduceOSR(TR::Node* node);
 
    bool induceOSRAfter(TR::TreeTop *insertionPoint, TR_ByteCodeInfo induceBCI, TR::TreeTop* branch, bool extendRemainder, int32_t offset, TR::TreeTop ** lastTreeTop = NULL);
+   bool induceOSRAfter(TR::TreeTop *insertionPoint, TR::Node* osrNode, TR::TreeTop* branch, bool extendRemainder, TR::TreeTop ** lastTreeTop = NULL);
    bool induceOSRAfterAndRecompile(TR::TreeTop *insertionPoint, TR_ByteCodeInfo induceBCI, TR::TreeTop* branch, bool extendRemainder, int32_t offset, TR::TreeTop ** lastTreeTop);
+   bool induceOSRAfterAndRecompile(TR::TreeTop *insertionPoint, TR::Node* osrNode, TR::TreeTop* branch, bool extendRemainder, TR::TreeTop ** lastTreeTop);
+   bool induceOSRAtMethodEntry(TR::TreeTop* branch, bool extendRemainder, TR::TreeTop ** lastTreeTop = NULL);
+   bool induceOSRAtMethodEntryAndRecompile(TR::TreeTop* branch, bool extendRemainder, TR::TreeTop ** lastTreeTop = NULL);
    TR::TreeTop *induceImmediateOSRWithoutChecksBefore(TR::TreeTop *insertionPoint);
 
    int32_t incTempIndex(TR_FrontEnd * fe);
@@ -274,10 +278,15 @@ public:
    bool detectInternalCycles();
    bool catchBlocksHaveRealPredecessors();
 
+   // liqun: cannot attempt OSR at bytecode index n of this method
    void setCannotAttemptOSR(int32_t n);
    bool cannotAttemptOSRAt(TR_ByteCodeInfo &bci, TR::Block *blockToOSRAt, TR::Compilation *comp);
    bool cannotAttemptOSRDuring(int32_t callSite, TR::Compilation *comp, bool runCleanup = true);
+   bool supportsInduceOSRAtMethodEntry(TR::Compilation *comp, bool runCleanup = true);
+   bool supportsInduceOSRAtMethodEntryAndRecompile(TR::Compilation *comp, bool runCleanup = true);
    bool supportsInduceOSR(TR_ByteCodeInfo &bci, TR::Block *blockToOSRAt, TR::Compilation *comp, bool runCleanup = true);
+   bool supportsInduceOSR(TR::Node* node, TR::Block *blockToOSRAt, TR::Compilation *comp, bool runCleanup = true);
+   bool supportsInduceOSR(TR::TreeTop* tt, TR::Compilation *comp, bool runCleanup = true);
    bool hasOSRProhibitions();
 
    typedef enum

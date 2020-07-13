@@ -76,6 +76,20 @@ typedef struct TR_ByteCodeInfo
    static const int32_t invalidByteCodeIndex =  -1;
    static const int16_t invalidCallerIndex = -1;
 
+   TR_ByteCodeInfo()
+      : _callerIndex(invalidCallerIndex),
+        _byteCodeIndex(invalidByteCodeIndex),
+        _isSameReceiver(0),
+        _doNotProfile(0)
+      {}
+
+   TR_ByteCodeInfo(int32_t callerIndex, int32_t byteCodeIndex)
+      : _callerIndex(callerIndex),
+        _byteCodeIndex(byteCodeIndex),
+        _isSameReceiver(0),
+        _doNotProfile(0)
+      {}
+
    void setInvalidByteCodeIndex()
       {
       setByteCodeIndex(invalidByteCodeIndex);

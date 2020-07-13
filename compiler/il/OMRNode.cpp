@@ -199,8 +199,6 @@ OMR::Node::Node(TR::Node *originatingByteCodeNode, TR::ILOpCodes op, uint16_t nu
       // estimate code size to be able to propagate frequencies
       //else
       //   TR_ASSERT(0, "no byte code info");
-
-      _byteCodeInfo.setDoNotProfile(1);
       }
       if(comp->getDebug())
         comp->getDebug()->newNode(self());
@@ -267,16 +265,6 @@ OMR::Node::Node(TR::Node * from, uint16_t numChildren)
 
    if(comp->getDebug())
       comp->getDebug()->newNode(self());
-
-   TR_IlGenerator * ilGen = comp->getCurrentIlGenerator();
-   if (ilGen)
-      {
-      _byteCodeInfo.setDoNotProfile(0);
-      }
-   else
-      {
-      _byteCodeInfo.setDoNotProfile(1);
-      }
 
    if (from->getOpCode().isBranch() || from->getOpCode().isSwitch())
       _byteCodeInfo.setDoNotProfile(1);
@@ -540,9 +528,6 @@ OMR::Node::recreateAndCopyValidPropertiesImpl(TR::Node *originalNode, TR::ILOpCo
    TR_ASSERT(originalNode != NULL, "trying to recreate node from a NULL originalNode.");
    if (originalNode->getOpCodeValue() == op)
       {
-      if (!originalNode->hasSymbolReference() || newSymRef != originalNode->getSymbolReference())
-         originalNode->_byteCodeInfo.setDoNotProfile(1);
-
       // need to at least set the new symbol reference on the node before returning
       if (newSymRef)
          originalNode->setSymbolReference(newSymRef);
@@ -590,7 +575,6 @@ OMR::Node::recreateAndCopyValidPropertiesImpl(TR::Node *originalNode, TR::ILOpCo
 
    // TODO: copyValidProperties is incomplete
    TR::Node::copyValidProperties(originalNodeCopy, node);
-   originalNode->_byteCodeInfo.setDoNotProfile(1);
 
    // add originalNodeCopy back to the node pool
    comp->getNodePool().deallocate(originalNodeCopy);
@@ -1221,11 +1205,8 @@ OMR::Node::createPotentialOSRPointHelperCallInILGen(TR::Node* originatingByteCod
 
    TR::Node* callNode = TR::Node::createWithSymRef(originatingByteCodeNode, TR::call, 0, TR::comp()->getSymRefTab()->findOrCreatePotentialOSRPointHelperSymbolRef());
    callNode->setOSRInductionOffset(osrInductionOffset);
+   comp->addOSRNode(callNode);
 
-   // Node created outside of ilgen will have doNotProfile set, this results in OSR infrastructure believing it
-   // can not OSR at this node. Reset this flag since a potentialOSRPointHelper is a safe OSR transition point
-   //
-   callNode->getByteCodeInfo().setDoNotProfile(0);
    return callNode;
    }
 
@@ -4155,16 +4136,12 @@ void
 OMR::Node::setByteCodeInfo(const TR_ByteCodeInfo &bcInfo)
    {
    _byteCodeInfo = bcInfo;
-   if (!TR::comp()->getCurrentIlGenerator())
-      _byteCodeInfo.setDoNotProfile(1);
    }
 
 void
 OMR::Node::copyByteCodeInfo(TR::Node * from)
    {
    _byteCodeInfo = from->_byteCodeInfo;
-   if (!TR::comp()->getCurrentIlGenerator())
-      _byteCodeInfo.setDoNotProfile(1);
    }
 
 uint32_t
