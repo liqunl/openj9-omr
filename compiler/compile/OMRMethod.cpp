@@ -179,6 +179,12 @@ OMR::Method::setArchetypeSpecimen(bool b)
    TR_UNIMPLEMENTED();
    }
 
+void
+OMR::Method::setAdapterOrLambdaForm(bool b)
+   {
+   TR_UNIMPLEMENTED();
+   }
+
 
 TR_MethodParameterIterator *
 OMR::Method::getParameterIterator(TR::Compilation&, TR_ResolvedMethod *)

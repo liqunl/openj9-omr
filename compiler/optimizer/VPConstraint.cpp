@@ -2901,6 +2901,7 @@ TR::VPConstraint *TR::VPLongConstraint::intersect1(TR::VPConstraint *other, OMR:
    }
 
 
+// liqun: this function doesn't handle when one of the constraint is fixed class
 TR::VPClassType *TR::VPClassType::classTypesCompatible(TR::VPClassType * otherType, OMR::ValuePropagation *vp)
    {
    TR::VPResolvedClass *rc = asResolvedClass();
