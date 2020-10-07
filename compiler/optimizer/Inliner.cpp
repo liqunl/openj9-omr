@@ -6397,14 +6397,6 @@ OMR_InlinerUtil::clearArgInfoForNonInvariantArguments(TR_CallTarget *target, TR_
       traceMsg(comp(), "Clearing arg info for non invariant arguments\n");
 
    TR::ResolvedMethodSymbol* methodSymbol = target->_calleeSymbol;
-
-   if (methodSymbol->getMethod()->isAdapterOrLambdaForm())
-      {
-      if (tracePrex)
-         traceMsg(comp(), "MethodHandle adapter or lambda form, skip clearing arg info\n");
-      return;
-      }
-
    TR_PrexArgInfo* argInfo = target->_prexArgInfo;
    if (!argInfo)
       {
@@ -6424,26 +6416,12 @@ OMR_InlinerUtil::clearArgInfoForNonInvariantArguments(TR_CallTarget *target, TR_
 
       TR_ASSERT(storeNode->getSymbolReference(), "stores should have symRefs");
       TR::ParameterSymbol*  parmSymbol = storeNode->getSymbolReference()->getSymbol()->getParmSymbol();
-      auto ordinal = parmSymbol->getOrdinal();
-      if (ordinal < argInfo->getNumArgs() && argInfo->get(ordinal))
+      if (parmSymbol->getOrdinal() < argInfo->getNumArgs())
          {
-         auto prexArg = argInfo->get(ordinal);
-         // If the value to store is the same as the original value, don't unset the arg info
-         auto valueNode = storeNode->getFirstChild();
-         if (valueNode->getOpCode().hasSymbolReference() &&
-             valueNode->getSymbolReference()->hasKnownObjectIndex() &&
-             prexArg->getKnownObjectIndex() == valueNode->getSymbolReference()->getKnownObjectIndex())
-            {
-            if (tracePrex)
-               traceMsg(comp(), "ARGS PROPAGATION: arg %d holds the same value after store node n%dn, keep argInfo %p", ordinal, storeNode->getGlobalIndex(), argInfo);
-            }
-         else
-            {
-            if (tracePrex)
-               traceMsg(comp(), "ARGS PROPAGATION: unsetting an arg [%i] of argInfo %p", parmSymbol->getOrdinal(), argInfo);
-            argInfo->set(parmSymbol->getOrdinal(), NULL);
-            cleanedAnything = true;
-            }
+         if (tracePrex)
+            traceMsg(comp(), "ARGS PROPAGATION: unsetting an arg [%i] of argInfo %p", parmSymbol->getOrdinal(), argInfo);
+         argInfo->set(parmSymbol->getOrdinal(), NULL);
+         cleanedAnything = true;
          }
       }
 
