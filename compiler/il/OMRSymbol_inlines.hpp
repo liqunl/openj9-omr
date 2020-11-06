@@ -601,10 +601,17 @@ OMR::Symbol::isConstMethodHandle()
    return self()->isStatic() && _flags2.testAny(ConstMethodHandle);
    }
 
+void
+OMR::Symbol::setConstObjectRef()
+   {
+   TR_ASSERT(self()->isStatic(), "assert failure");
+   _flags2.set(ConstObjectRef);
+   }
+
 bool
 OMR::Symbol::isConstObjectRef()
    {
-   return self()->isStatic() && (_flags.testAny(ConstString) || _flags2.testAny(ConstMethodType|ConstMethodHandle|ConstantDynamic));
+   return self()->isStatic() && (_flags.testAny(ConstString) || _flags2.testAny(ConstObjectRef|ConstMethodType|ConstMethodHandle|ConstantDynamic));
    }
 
 bool

@@ -401,6 +401,7 @@ public:
    inline void setConstMethodHandle();
    inline bool isConstMethodHandle();
 
+   inline void setConstObjectRef();
    inline bool isConstObjectRef();
    inline bool isStaticField();
    inline bool isFixedObjectRef();
@@ -554,6 +555,7 @@ public:
       ImmutableField            = 0x00000400,
       PendingPush               = 0x00000800,
       ConstantDynamic           = 0x00001000,
+      ConstObjectRef            = 0x00002000,
       };
 
 protected:
