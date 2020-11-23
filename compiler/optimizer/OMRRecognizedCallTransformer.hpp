@@ -60,6 +60,12 @@ class RecognizedCallTransformer : public TR::Optimization
     *
     */
    virtual void transform(TR::TreeTop* treetop);
+
+   /** \brief
+    *     Perform work needed by transformation stage, such as collecting data that will be used
+    *     during transformation.
+    */
+   virtual void preProcess();
    };
 
 }
