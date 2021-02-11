@@ -1447,17 +1447,27 @@ int16_t OMR::Compilation::matchingCallStackPrefixLength(TR_ByteCodeInfo &bcInfo)
 
 int16_t OMR::Compilation::restoreInlineDepthUntil(int32_t stopIndex, TR_ByteCodeInfo &currentInfo)
    {
-   if (currentInfo.getCallerIndex() == -1)
-      return 0; // Resulting call stack is empty; nothing to do
-   else if (stopIndex == currentInfo.getCallerIndex())
-      return 0;
+   TR::StackMemoryRegion stackMemoryRegion(*self()->trMemory());
+   // caller in first, need to use a stack to reconstruct the stack
+   TR_ByteCodeInfo bcInfo = currentInfo;
+   int16_t framesAdded = 0;
+   TR_Stack<int32_t> tmp(self()->trMemory(), 8, false, stackAlloc);
+   while (bcInfo.getCallerIndex() != -1 &&
+          bcInfo.getCallerIndex() != stopIndex)
+      {
+      int16_t callerIndex = bcInfo.getCallerIndex();
+      bcInfo = self()->getInlinedCallSite(callerIndex)._byteCodeInfo;
+      tmp.push(callerIndex);
+      }
 
-   int16_t callerIndex = currentInfo.getCallerIndex();
-   int16_t framesAdded = self()->restoreInlineDepthUntil(stopIndex, self()->getInlinedCallSite(callerIndex)._byteCodeInfo);
-   _inlinedCallStack.push(callerIndex);
-   _inlinedCallArgInfoStack.push(NULL); // We have no argInfo for previously-inlined frames, though there's not much we could do with it anyway
+   while (!tmp.isEmpty())
+      {
+      _inlinedCallStack.push(tmp.pop());
+      _inlinedCallArgInfoStack.push(NULL); // We have no argInfo for previously-inlined frames, though there's not much we could do with it anyway
+      framesAdded++;
+      }
 
-   return framesAdded + 1;
+   return framesAdded;
    }
 
 int16_t OMR::Compilation::restoreInlineDepth(TR_ByteCodeInfo &existingInfo)
