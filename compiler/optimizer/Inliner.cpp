@@ -3456,27 +3456,18 @@ TR::TreeTop * OMR_InlinerUtil::storeValueInATemp(
 
       if (!tempSymRef)
          {
-         tempSymRef = comp->getSymRefTab()->
-                      createTemporary(methodSymbol, dataType, false
+         tempSymRef = new (comp->trHeapMemory())
+         TR::SymbolReference(comp->getSymRefTab(),
 #ifdef J9_PROJECT_SPECIFIC
-                      , value->getType().isBCD() ? value->getSize() : 0
+                            value->getType().isBCD() ?
+                            TR::AutomaticSymbol::create(comp->trHeapMemory(),dataType,value->getSize()) :
 #endif
-                      );
-
-//         tempSymRef = new (comp->trHeapMemory())
-//         TR::SymbolReference(comp->getSymRefTab(),
-//#ifdef J9_PROJECT_SPECIFIC
-//                            value->getType().isBCD() ?
-//                            TR::AutomaticSymbol::create(comp->trHeapMemory(),dataType,value->getSize()) :
-//#endif
-//                            TR::AutomaticSymbol::create(comp->trHeapMemory(),dataType),
-//                            methodSymbol->getResolvedMethodIndex(),
-//                            methodSymbol->incTempIndex(comp->fe()));
+                            TR::AutomaticSymbol::create(comp->trHeapMemory(),dataType),
+                            methodSymbol->getResolvedMethodIndex(),
+                            methodSymbol->incTempIndex(comp->fe()));
 
          if (value->getOpCode().hasSymbolReference() && value->getSymbolReference()->getSymbol()->isNotCollected())
             tempSymRef->getSymbol()->setNotCollected();
-
-         traceMsg(comp,"Created temp symref %p #%d without adding to symref list\n", tempSymRef, tempSymRef->getReferenceNumber());
          }
 
       tempList.add(tempSymRef);
@@ -5815,7 +5806,7 @@ TR_InlinerTracer::TR_InlinerTracer( TR::Compilation *comp, TR_FrontEnd *fe, TR::
   : TR_LogTracer(comp,opt), _fe(fe), _trMemory(_comp->trMemory())
    {
    _traceLevel = 0;
-   if(true || opt)                      //this means I want tracing on
+   if(opt)                      //this means I want tracing on
       {
       if (comp->trace(OMR::inlining))
          _traceLevel=trace_heuristic;
